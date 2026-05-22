@@ -21,7 +21,7 @@ const Input = ({ value, onChange, placeholder, type='text', step }) => (
     placeholder={placeholder || ''}
     onChange={e => onChange(type === 'number' ? (e.target.value === '' ? '' : parseFloat(e.target.value)) : e.target.value)}
     style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
-      padding:'7px 10px', borderRadius:4, fontSize:11, fontFamily:t.mono,
+      padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
       width:'100%', outline:'none' }}
   />
 )
@@ -29,7 +29,7 @@ const Input = ({ value, onChange, placeholder, type='text', step }) => (
 const Select = ({ value, onChange, options, placeholder }) => (
   <select value={value ?? ''} onChange={e => onChange(e.target.value)}
     style={{ background:t.surf3, border:`1px solid ${t.border}`, color: value ? t.text : t.dim,
-      padding:'7px 10px', borderRadius:4, fontSize:11, fontFamily:t.mono,
+      padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
       width:'100%', outline:'none', cursor:'pointer' }}>
     {placeholder && <option value="">{placeholder}</option>}
     {options.map(o => <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>)}
@@ -54,13 +54,13 @@ const Btn = ({ children, onClick, variant='primary', small, disabled }) => {
 }
 
 const Label = ({ children }) => (
-  <div style={{ fontSize:9, fontFamily:t.mono, color:t.dim, textTransform:'uppercase',
+  <div style={{ fontSize:14, fontFamily:t.mono, color:t.dim, textTransform:'uppercase',
     letterSpacing:'0.12em', marginBottom:4 }}>{children}</div>
 )
 
 const Tag = ({ children, color }) => (
   <span style={{ background:`${color}18`, border:`1px solid ${color}44`,
-    borderRadius:3, padding:'2px 8px', fontSize:9, fontFamily:t.mono, color }}>
+    borderRadius:3, padding:'2px 8px', fontSize:14, fontFamily:t.mono, color }}>
     {children}
   </span>
 )
@@ -72,7 +72,7 @@ const Modal = ({ title, onClose, children, wide }) => (
       width:'100%', maxWidth: wide ? 640 : 480, maxHeight:'90vh', overflow:'auto' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
         padding:'14px 20px', borderBottom:`1px solid ${t.border}` }}>
-        <span style={{ fontFamily:t.head, fontSize:16, fontWeight:700,
+        <span style={{ fontFamily:t.head, fontSize:19, fontWeight:700,
           textTransform:'uppercase', letterSpacing:'0.06em', color:t.text }}>{title}</span>
         <button onClick={onClose} style={{ background:'none', border:'none',
           color:t.dim, fontSize:18, cursor:'pointer', lineHeight:1 }}>✕</button>
@@ -109,12 +109,12 @@ function Login({ onLogin }) {
         <div style={{ marginBottom:32 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
             <div style={{ width:4, height:28, background:t.accent, borderRadius:2 }} />
-            <span style={{ fontFamily:t.head, fontSize:26, fontWeight:800,
+            <span style={{ fontFamily:t.head, fontSize:28, fontWeight:800,
               textTransform:'uppercase', letterSpacing:'0.08em', color:t.text }}>
               FH6 Data Entry
             </span>
           </div>
-          <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono, marginLeft:14 }}>
+          <div style={{ fontSize:13, color:t.dim, fontFamily:t.mono, marginLeft:14 }}>
             Parts catalog tool
           </div>
         </div>
@@ -122,7 +122,7 @@ function Login({ onLogin }) {
           borderRadius:8, padding:24 }}>
           <Row label="Email"><Input value={email} onChange={setEmail} placeholder="email@example.com" /></Row>
           <Row label="Password"><Input value={pass} onChange={setPass} type="password" placeholder="••••••••" /></Row>
-          {err && <div style={{ color:t.red, fontSize:10, fontFamily:t.mono, marginBottom:12 }}>{err}</div>}
+          {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, marginBottom:12 }}>{err}</div>}
           <Btn onClick={submit} disabled={loading}>{loading ? 'Signing in...' : 'Sign In'}</Btn>
         </div>
       </div>
@@ -171,7 +171,7 @@ function CarModal({ car, onClose, onSaved, userId }) {
         <Select value={form.stock_drivetrain} onChange={v => upd('stock_drivetrain',v)}
           placeholder="— select —" options={['RWD','FWD','AWD']} />
       </Row>
-      {err && <div style={{ color:t.red, fontSize:10, fontFamily:t.mono, marginBottom:12 }}>{err}</div>}
+      {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, marginBottom:12 }}>{err}</div>}
       <div style={{ display:'flex', gap:8 }}>
         <Btn onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Btn>
         <Btn onClick={onClose} variant="ghost">Cancel</Btn>
@@ -238,7 +238,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
             : <Input value={customCat} onChange={setCustomCat} placeholder="New category name" />
           }
           <button onClick={() => setUseCustomCat(p => !p)}
-            style={{ background:'none', border:'none', color:t.blue, fontSize:9,
+            style={{ background:'none', border:'none', color:t.blue, fontSize:14,
               fontFamily:t.mono, cursor:'pointer', marginTop:4, padding:0 }}>
             {useCustomCat ? '← Use predefined' : '+ New category'}
           </button>
@@ -250,7 +250,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
             : <Input value={customSub} onChange={setCustomSub} placeholder="New subcategory name" />
           }
           <button onClick={() => setUseCustomSub(p => !p)}
-            style={{ background:'none', border:'none', color:t.blue, fontSize:9,
+            style={{ background:'none', border:'none', color:t.blue, fontSize:14,
               fontFamily:t.mono, cursor:'pointer', marginTop:4, padding:0 }}>
             {useCustomSub ? '← Use predefined' : '+ New subcategory'}
           </button>
@@ -268,12 +268,12 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
           <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
             <input type="checkbox" checked={isStock} onChange={e => setIsStock(e.target.checked)}
               style={{ accentColor:t.accent, width:14, height:14 }} />
-            <span style={{ fontSize:10, color:t.mid, fontFamily:t.mono }}>Stock / base part</span>
+            <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>Stock / base part</span>
           </div>
         </Row>
       </div>
       <HR />
-      <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono,
+      <div style={{ fontSize:13, color:t.dim, fontFamily:t.mono,
         textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:12 }}>
         Effects — fill in what you know, leave the rest empty
       </div>
@@ -286,7 +286,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                     checked={!!effects[f.key]}
                     onChange={e => setEffect(f.key, e.target.checked || undefined)}
                     style={{ accentColor:t.accent, width:14, height:14 }} />
-                  <span style={{ fontSize:10, color:t.mid, fontFamily:t.mono }}>Yes</span>
+                  <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>Yes</span>
                 </div>
               : f.type === 'select'
               ? <Select value={effects[f.key] || ''} onChange={v => setEffect(f.key, v || undefined)}
@@ -297,7 +297,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
           </Row>
         ))}
       </div>
-      {err && <div style={{ color:t.red, fontSize:10, fontFamily:t.mono, margin:'8px 0' }}>{err}</div>}
+      {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, margin:'8px 0' }}>{err}</div>}
       <HR />
       <div style={{ display:'flex', gap:8 }}>
         <Btn onClick={save} disabled={saving}>{saving ? 'Saving...' : isEdit ? 'Update' : 'Add Part'}</Btn>
@@ -359,10 +359,10 @@ function CarDetail({ car, userId, onBack }) {
       <div style={{ background:t.surf, borderBottom:`1px solid ${t.border}`,
         padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
         <button onClick={onBack} style={{ background:'none', border:`1px solid ${t.border}`,
-          color:t.dim, padding:'5px 12px', borderRadius:4, fontSize:10,
+          color:t.dim, padding:'5px 12px', borderRadius:4, fontSize:13,
           fontFamily:t.mono, cursor:'pointer', textTransform:'uppercase' }}>← Back</button>
         <div style={{ flex:1 }}>
-          <div style={{ fontFamily:t.head, fontSize:22, fontWeight:800,
+          <div style={{ fontFamily:t.head, fontSize:24, fontWeight:800,
             textTransform:'uppercase', letterSpacing:'0.05em', color:t.text }}>
             {car.year} {car.make} {car.model}
           </div>
@@ -378,7 +378,7 @@ function CarDetail({ car, userId, onBack }) {
 
       {/* Parts list */}
       <div style={{ flex:1, overflowY:'auto', padding:20 }}>
-        {loading && <div style={{ color:t.dim, fontSize:11, fontFamily:t.mono }}>Loading...</div>}
+        {loading && <div style={{ color:t.dim, fontSize:14, fontFamily:t.mono }}>Loading...</div>}
 
         {/* Category groups from DB */}
         {Object.entries(grouped).map(([cat, subs]) => (
@@ -392,10 +392,10 @@ function CarDetail({ car, userId, onBack }) {
                 {cat}
               </span>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:9, color:t.dim, fontFamily:t.mono }}>
+                <span style={{ fontSize:14, color:t.dim, fontFamily:t.mono }}>
                   {Object.values(subs).flat().length} parts
                 </span>
-                <span style={{ color:t.dim, fontSize:12 }}>{expanded[cat] ? '▲' : '▼'}</span>
+                <span style={{ color:t.dim, fontSize:14 }}>{expanded[cat] ? '▲' : '▼'}</span>
               </div>
             </div>
 
@@ -407,11 +407,11 @@ function CarDetail({ car, userId, onBack }) {
                     <div style={{ background:t.surf, padding:'8px 14px',
                       borderTop:`1px solid ${t.border}`,
                       display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <span style={{ fontSize:11, color:t.mid, fontFamily:t.mono,
+                      <span style={{ fontSize:14, color:t.mid, fontFamily:t.mono,
                         fontWeight:700 }}>{sub}</span>
                       <button onClick={() => openAdd(cat, sub)}
                         style={{ background:'none', border:'none', color:t.blue,
-                          fontSize:10, fontFamily:t.mono, cursor:'pointer' }}>
+                          fontSize:13, fontFamily:t.mono, cursor:'pointer' }}>
                         + add here
                       </button>
                     </div>
@@ -432,7 +432,7 @@ function CarDetail({ car, userId, onBack }) {
         {!loading && parts.length === 0 && (
           <div style={{ textAlign:'center', padding:60 }}>
             <div style={{ fontSize:36, marginBottom:12 }}>📋</div>
-            <div style={{ color:t.dim, fontFamily:t.mono, fontSize:12, marginBottom:16 }}>
+            <div style={{ color:t.dim, fontFamily:t.mono, fontSize:14, marginBottom:16 }}>
               No parts added yet for this car.
             </div>
             <Btn onClick={() => openAdd()}>+ Add First Part</Btn>
@@ -442,7 +442,7 @@ function CarDetail({ car, userId, onBack }) {
         {/* Quick-add buttons by default category */}
         {!loading && (
           <div style={{ marginTop:16 }}>
-            <div style={{ fontSize:9, color:t.dim, fontFamily:t.mono,
+            <div style={{ fontSize:14, color:t.dim, fontFamily:t.mono,
               textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:10 }}>
               Quick Add by Category
             </div>
@@ -450,7 +450,7 @@ function CarDetail({ car, userId, onBack }) {
               {Object.keys(CATEGORIES).map(cat => (
                 <button key={cat} onClick={() => openAdd(cat)}
                   style={{ background:t.surf, border:`1px solid ${t.border}`,
-                    color:t.mid, padding:'5px 12px', borderRadius:4, fontSize:10,
+                    color:t.mid, padding:'5px 12px', borderRadius:4, fontSize:13,
                     fontFamily:t.mono, cursor:'pointer' }}>
                   {cat}
                 </button>
@@ -490,7 +490,7 @@ function PartRow({ part, userId, onEdit, onVerify, onDelete }) {
         display:'flex', alignItems:'flex-start', gap:12, transition:'background 0.1s' }}>
       <div style={{ flex:1 }}>
         <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          <span style={{ fontSize:12, color: part.is_stock ? t.dim : t.text,
+          <span style={{ fontSize:14, color: part.is_stock ? t.dim : t.text,
             fontFamily:t.mono }}>{part.name}</span>
           {part.is_stock && <Tag color={t.dim}>STOCK</Tag>}
           {part.pi_change !== 0 && (
@@ -506,7 +506,7 @@ function PartRow({ part, userId, onEdit, onVerify, onDelete }) {
         {effKeys.length > 0 && (
           <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:5 }}>
             {effKeys.map(k => (
-              <span key={k} style={{ fontSize:9, color:t.dim, fontFamily:t.mono,
+              <span key={k} style={{ fontSize:14, color:t.dim, fontFamily:t.mono,
                 background:t.surf3, padding:'1px 6px', borderRadius:2 }}>
                 {k.replace(/_/g,' ')}: {typeof eff[k]==='boolean'?'yes':eff[k]}
               </span>
@@ -561,7 +561,7 @@ function Garage({ userId, onSelectCar }) {
         <Btn onClick={() => setModal('add')}>+ Add Car</Btn>
         <button onClick={() => supabase.auth.signOut()}
           style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
-            padding:'5px 12px', borderRadius:4, fontSize:10, fontFamily:t.mono, cursor:'pointer' }}>
+            padding:'5px 12px', borderRadius:4, fontSize:13, fontFamily:t.mono, cursor:'pointer' }}>
           Sign out
         </button>
       </div>
@@ -571,17 +571,17 @@ function Garage({ userId, onSelectCar }) {
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search cars... (make, model, year)"
           style={{ background:t.surf, border:`1px solid ${t.border}`, color:t.text,
-            padding:'9px 14px', borderRadius:6, fontSize:11, fontFamily:t.mono,
+            padding:'9px 14px', borderRadius:6, fontSize:14, fontFamily:t.mono,
             width:'100%', outline:'none' }} />
       </div>
 
       {/* Car list */}
       <div style={{ flex:1, overflowY:'auto', padding:20 }}>
-        {loading && <div style={{ color:t.dim, fontSize:11, fontFamily:t.mono }}>Loading...</div>}
+        {loading && <div style={{ color:t.dim, fontSize:14, fontFamily:t.mono }}>Loading...</div>}
         {!loading && filtered.length === 0 && (
           <div style={{ textAlign:'center', padding:60 }}>
             <div style={{ fontSize:36, marginBottom:12 }}>🚗</div>
-            <div style={{ color:t.dim, fontFamily:t.mono, fontSize:12, marginBottom:16 }}>
+            <div style={{ color:t.dim, fontFamily:t.mono, fontSize:14, marginBottom:16 }}>
               {search ? 'No cars match your search.' : 'No cars in catalog yet.'}
             </div>
             <Btn onClick={() => setModal('add')}>+ Add First Car</Btn>
@@ -616,15 +616,15 @@ function CarCard({ car, onClick, onEdit }) {
         borderRadius:6, padding:14, cursor:'pointer', transition:'border-color 0.15s' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
         <div>
-          <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono }}>{car.year}</div>
-          <div style={{ fontFamily:t.head, fontSize:17, fontWeight:700,
+          <div style={{ fontSize:14, color:t.dim, fontFamily:t.mono }}>{car.year}</div>
+          <div style={{ fontFamily:t.head, fontSize:20, fontWeight:700,
             textTransform:'uppercase', letterSpacing:'0.04em', color:t.text, marginTop:2 }}>
             {car.make} {car.model}
           </div>
         </div>
         <button onClick={e => { e.stopPropagation(); onEdit() }}
           style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
-            padding:'3px 10px', borderRadius:3, fontSize:9, fontFamily:t.mono, cursor:'pointer' }}>
+            padding:'3px 10px', borderRadius:3, fontSize:14, fontFamily:t.mono, cursor:'pointer' }}>
           Edit
         </button>
       </div>
@@ -653,7 +653,7 @@ export default function App() {
   if (!authReady) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center',
       justifyContent:'center', background:t.bg, color:t.dim,
-      fontSize:11, fontFamily:t.mono }}>Loading...</div>
+      fontSize:14, fontFamily:t.mono }}>Loading...</div>
   )
 
   if (!session) return <Login onLogin={setSession} />
