@@ -652,23 +652,47 @@ function CarDetail({ car, userId, userRole, onBack }) {
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
       {/* Header */}
       <div style={{ background:t.surf, borderBottom:`1px solid ${t.border}`,
-        padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
-        <button onClick={onBack} style={{ background:'none', border:`1px solid ${t.border}`,
-          color:t.dim, padding:'5px 12px', borderRadius:4, fontSize:13,
-          fontFamily:t.mono, cursor:'pointer', textTransform:'uppercase' }}>← Back</button>
-        <div style={{ flex:1 }}>
-          <div style={{ fontFamily:t.head, fontSize:24, fontWeight:800,
-            textTransform:'uppercase', letterSpacing:'0.05em', color:t.text }}>
-            {car.year} {car.make} {car.model}
+        padding:'14px 20px', flexShrink:0 }}>
+        {/* Top row */}
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
+          <button onClick={onBack} style={{ background:'none', border:`1px solid ${t.border}`,
+            color:t.dim, padding:'5px 12px', borderRadius:4, fontSize:13,
+            fontFamily:t.mono, cursor:'pointer', textTransform:'uppercase' }}>← Back</button>
+          <div style={{ flex:1 }}>
+            <div style={{ fontFamily:t.head, fontSize:24, fontWeight:800,
+              textTransform:'uppercase', letterSpacing:'0.05em', color:t.text }}>
+              {car.year} {car.make} {car.model}
+            </div>
           </div>
-          <div style={{ display:'flex', gap:6, marginTop:4 }}>
-            {car.stock_class && <Tag color={t.yellow}>{car.stock_class} {car.stock_pi}</Tag>}
-            {car.stock_drivetrain && <Tag color={dtColor}>{car.stock_drivetrain}</Tag>}
-            <Tag color={t.dim}>{parts.length} parts</Tag>
-            <Tag color={t.green}>{parts.filter(p=>p.verified).length} verified</Tag>
-          </div>
+          <Btn onClick={() => openAdd()}>+ Add Part</Btn>
         </div>
-        <Btn onClick={() => openAdd()}>+ Add Part</Btn>
+
+        {/* Info panel */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px,1fr))',
+          gap:'6px 12px', background:t.surf2, borderRadius:6, padding:'10px 14px' }}>
+          {[
+            { label:'Class',      value: car.stock_class && car.stock_pi ? `${car.stock_class} ${car.stock_pi}` : car.stock_class, color: t.yellow },
+            { label:'Drivetrain', value: car.stock_drivetrain, color: { RWD:t.accent, FWD:t.blue, AWD:t.green }[car.stock_drivetrain] || t.dim },
+            { label:'Type',       value: car.car_type,       color: t.mid },
+            { label:'Country',    value: car.country,        color: t.mid },
+            { label:'Collection', value: car.collection,     color: t.dim },
+            { label:'DLC',        value: car.dlc_pack || (car.is_dlc ? 'Yes' : null), color: t.red },
+            { label:'Parts',      value: `${parts.length} total`, color: t.dim },
+            { label:'Verified',   value: `${parts.filter(p=>p.verified).length} / ${parts.length}`, color: t.green },
+          ].filter(item => item.value).map(item => (
+            <div key={item.label}>
+              <div style={{ fontSize:10, fontFamily:t.mono, color:t.dim,
+                textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:2 }}>
+                {item.label}
+              </div>
+              <div style={{ fontSize:13, fontFamily:t.mono, color:item.color,
+                fontWeight:700, whiteSpace:'nowrap', overflow:'hidden',
+                textOverflow:'ellipsis' }}>
+                {item.value}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Parts list */}
