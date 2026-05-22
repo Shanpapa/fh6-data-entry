@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { CATEGORIES, EFFECT_FIELDS } from './lib/categories'
+import { CATEGORIES, EFFECT_FIELDS, CAR_STAT_FIELDS, CLASSES } from './lib/categories'
 
 // ── THEME ─────────────────────────────────────────────────
 const t = {
@@ -300,13 +300,14 @@ function CarModal({ car, onClose, onSaved, userId }) {
     collection: car?.collection || '', dlc_pack: car?.dlc_pack || '',
     is_dlc: car?.is_dlc || false,
   })
+  const [baseStats, setBaseStats] = useState(car?.base_stats || {})
   const [err,    setErr]    = useState('')
   const [saving, setSaving] = useState(false)
   const [makes,  setMakes]  = useState([])
   const [models, setModels] = useState([])
   const [years,  setYears]  = useState([])
-  const [carTypes, setCarTypes] = useState([])
-  const [countries, setCountries] = useState([])
+  const [carTypes,   setCarTypes]   = useState([])
+  const [countries,  setCountries]  = useState([])
 
   useEffect(() => {
     supabase.from('cars').select('make').order('make')
@@ -329,16 +330,21 @@ function CarModal({ car, onClose, onSaved, userId }) {
       .then(({ data }) => setYears((data||[]).map(r => String(r.year))))
   }, [form.make, form.model])
 
-  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  const upd  = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  const updS = (k, v) => setBaseStats(p => {
+    const n = { ...p }
+    if (v === '' || v === null) { delete n[k]; return n }
+    n[k] = v; return n
+  })
 
   const save = async () => {
     if (!form.make || !form.model || !form.year) { setErr('Make, model and year are required'); return }
     setSaving(true); setErr('')
     const payload = {
-      ...form,
-      year: parseInt(form.year),
+      ...form, year: parseInt(form.year),
       stock_pi: form.stock_pi ? parseInt(form.stock_pi) : null,
       dlc_pack: form.dlc_pack || null,
+      base_stats: Object.keys(baseStats).length > 0 ? baseStats : null,
       added_by: userId,
     }
     const { error } = isEdit
@@ -348,8 +354,18 @@ function CarModal({ car, onClose, onSaved, userId }) {
     onSaved()
   }
 
+  // Group CAR_STAT_FIELDS by section for display
+  const statGroups = [
+    { label:'Engine',   keys:['power_hp','torque_nm','weight_kg','pwr_hp_kg','displacement_cc','top_speed_kmh'] },
+    { label:'Timing',   keys:['accel_0_97','accel_0_161','brake_dist_97','brake_dist_161'] },
+    { label:'Dynamics', keys:['lateral_g_97','lateral_g_193','mech_balance','aero_balance','aero_efficiency'] },
+  ]
+
   return (
     <Modal title={isEdit ? 'Edit Car' : 'Add Car'} onClose={onClose} wide>
+      {/* Identity */}
+      <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono, textTransform:'uppercase',
+        letterSpacing:'0.12em', marginBottom:10 }}>Identity</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 16px' }}>
         <Row label="Make">
           <Autocomplete value={form.make} onChange={v => upd('make', v)}
@@ -365,10 +381,13 @@ function CarModal({ car, onClose, onSaved, userId }) {
         </Row>
       </div>
       <HR />
+      {/* Class & Drivetrain */}
+      <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono, textTransform:'uppercase',
+        letterSpacing:'0.12em', marginBottom:10 }}>Class & Drivetrain</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 16px' }}>
         <Row label="Stock Class">
           <Select value={form.stock_class} onChange={v => upd('stock_class',v)}
-            placeholder="— select —" options={['D','C','B','A','S1','S2','X']} />
+            placeholder="— select —" options={CLASSES} />
         </Row>
         <Row label="Stock PI">
           <input type="number" value={form.stock_pi ?? ''} placeholder="499"
@@ -382,20 +401,17 @@ function CarModal({ car, onClose, onSaved, userId }) {
             placeholder="— select —" options={['RWD','FWD','AWD']} />
         </Row>
       </div>
-      <HR />
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px', marginTop:4 }}>
         <Row label="Car Type">
           <Autocomplete value={form.car_type} onChange={v => upd('car_type', v)}
-            onSelect={v => upd('car_type', v)} suggestions={carTypes}
-            placeholder="Retro Rally" />
+            onSelect={v => upd('car_type', v)} suggestions={carTypes} placeholder="Retro Rally" />
         </Row>
         <Row label="Country">
           <Autocomplete value={form.country} onChange={v => upd('country', v)}
-            onSelect={v => upd('country', v)} suggestions={countries}
-            placeholder="Japan" />
+            onSelect={v => upd('country', v)} suggestions={countries} placeholder="Japan" />
         </Row>
         <Row label="Collection">
-          <input value={form.collection ?? ''} placeholder="Autoshow, Wheelspin"
+          <input value={form.collection ?? ''} placeholder="Autoshow"
             onChange={e => upd('collection', e.target.value)}
             style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
               padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
@@ -412,9 +428,36 @@ function CarModal({ car, onClose, onSaved, userId }) {
       <div style={{ display:'flex', alignItems:'center', gap:8, margin:'8px 0 14px' }}>
         <input type="checkbox" checked={form.is_dlc} onChange={e => upd('is_dlc', e.target.checked)}
           style={{ accentColor:t.accent, width:14, height:14 }} />
-        <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>DLC car (requires paid content)</span>
+        <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>DLC car</span>
       </div>
+      <HR />
+      {/* Base Stats */}
+      <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono, textTransform:'uppercase',
+        letterSpacing:'0.12em', marginBottom:4 }}>Base Stats (stock)</div>
+      <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginBottom:12 }}>
+        From in-game Performance screen — leave empty if unknown, fill in later
+      </div>
+      {statGroups.map(group => (
+        <div key={group.label} style={{ marginBottom:12 }}>
+          <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono, textTransform:'uppercase',
+            letterSpacing:'0.1em', marginBottom:8, borderBottom:`1px solid ${t.border}33`,
+            paddingBottom:4 }}>{group.label}</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0 16px' }}>
+            {CAR_STAT_FIELDS.filter(f => group.keys.includes(f.key)).map(f => (
+              <Row key={f.key} label={f.label}>
+                <input type="number" value={baseStats[f.key] ?? ''} step={f.step}
+                  placeholder="—"
+                  onChange={e => updS(f.key, e.target.value === '' ? '' : parseFloat(e.target.value))}
+                  style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                    padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+                    width:'100%', outline:'none' }} />
+              </Row>
+            ))}
+          </div>
+        </div>
+      ))}
       {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, marginBottom:12 }}>{err}</div>}
+      <HR />
       <div style={{ display:'flex', gap:8 }}>
         <Btn onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Btn>
         <Btn onClick={onClose} variant="ghost">Cancel</Btn>
@@ -565,33 +608,47 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         </Row>
       </div>
       <HR />
-      <div style={{ fontSize:13, color:t.dim, fontFamily:t.mono,
-        textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:12 }}>
-        Effects — fill in what you know, leave the rest empty
+      <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono,
+        textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:4 }}>
+        Effects — fill in what changed (+/- from base)
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 20px' }}>
-        {EFFECT_FIELDS.map(f => (
-          <Row key={f.key} label={f.label + (f.hint ? ` (${f.hint})` : '')}>
-            {f.type === 'bool'
-              ? <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
-                  <input type="checkbox"
-                    checked={!!effects[f.key]}
-                    onChange={e => setEffect(f.key, e.target.checked || undefined)}
-                    style={{ accentColor:t.accent, width:14, height:14 }} />
-                  <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>Yes</span>
-                </div>
-              : f.type === 'select'
-              ? <Select value={effects[f.key] || ''} onChange={v => setEffect(f.key, v || undefined)}
-                  placeholder="— none —" options={f.options} />
-              : <input type="number" value={effects[f.key] ?? ''} step={f.step}
-                  onChange={e => setEffect(f.key, e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                  style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
-                    padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
-                    width:'100%', outline:'none' }} />
-            }
-          </Row>
-        ))}
+      <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginBottom:12 }}>
+        Leave empty if unknown. Negative values = decrease (e.g. weight reduction).
       </div>
+      {['Main Stats','Engine','Braking','Lateral G','Speed','Aero','Flags'].map(group => {
+        const fields = EFFECT_FIELDS.filter(f => f.group === group)
+        return (
+          <div key={group} style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono, textTransform:'uppercase',
+              letterSpacing:'0.1em', marginBottom:8, borderBottom:`1px solid ${t.border}33`,
+              paddingBottom:4 }}>{group}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0 16px' }}>
+              {fields.map(f => (
+                <Row key={f.key} label={f.label}>
+                  {f.type === 'bool'
+                    ? <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
+                        <input type="checkbox"
+                          checked={!!effects[f.key]}
+                          onChange={e => setEffect(f.key, e.target.checked || undefined)}
+                          style={{ accentColor:t.accent, width:14, height:14 }} />
+                        <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>Yes</span>
+                      </div>
+                    : f.type === 'select'
+                    ? <Select value={effects[f.key] || ''} onChange={v => setEffect(f.key, v || undefined)}
+                        placeholder="— none —" options={f.options} />
+                    : <input type="number" value={effects[f.key] ?? ''} step={f.step}
+                        placeholder="—"
+                        onChange={e => setEffect(f.key, e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                        style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                          padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+                          width:'100%', outline:'none' }} />
+                  }
+                </Row>
+              ))}
+            </div>
+          </div>
+        )
+      })}
       {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, margin:'8px 0' }}>{err}</div>}
       <HR />
       <div style={{ display:'flex', gap:8 }}>
@@ -669,7 +726,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
 
         {/* Info panel */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px,1fr))',
-          gap:'6px 12px', background:t.surf2, borderRadius:6, padding:'10px 14px' }}>
+          gap:'6px 12px', background:t.surf2, borderRadius:6, padding:'10px 14px', marginBottom: car.base_stats ? 8 : 0 }}>
           {[
             { label:'Class',      value: car.stock_class && car.stock_pi ? `${car.stock_class} ${car.stock_pi}` : car.stock_class, color: t.yellow },
             { label:'Drivetrain', value: car.stock_drivetrain, color: { RWD:t.accent, FWD:t.blue, AWD:t.green }[car.stock_drivetrain] || t.dim },
@@ -686,13 +743,33 @@ function CarDetail({ car, userId, userRole, onBack }) {
                 {item.label}
               </div>
               <div style={{ fontSize:13, fontFamily:t.mono, color:item.color,
-                fontWeight:700, whiteSpace:'nowrap', overflow:'hidden',
-                textOverflow:'ellipsis' }}>
+                fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                 {item.value}
               </div>
             </div>
           ))}
         </div>
+
+        {/* Base stats */}
+        {car.base_stats && Object.keys(car.base_stats).length > 0 && (
+          <div style={{ background:t.surf2, borderRadius:6, padding:'10px 14px',
+            display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))', gap:'6px 12px' }}>
+            {Object.entries(car.base_stats).map(([k, v]) => {
+              const field = (CAR_STAT_FIELDS || []).find(f => f.key === k)
+              return (
+                <div key={k}>
+                  <div style={{ fontSize:10, fontFamily:t.mono, color:t.dim,
+                    textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:2 }}>
+                    {field?.label || k.replace(/_/g,' ')}
+                  </div>
+                  <div style={{ fontSize:13, fontFamily:t.mono, color:t.text }}>
+                    {v}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Parts list */}
