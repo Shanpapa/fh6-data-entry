@@ -88,15 +88,78 @@ const Row = ({ label, children }) => (
 
 const HR = () => <div style={{ borderTop:`1px solid ${t.border}`, margin:'16px 0' }} />
 
-// ── LOGIN ─────────────────────────────────────────────────
-function Login({ onLogin }) {
-  const [email, setEmail] = useState('')
-  const [pass,  setPass]  = useState('')
-  const [err,   setErr]   = useState('')
+// ── AUTOCOMPLETE ──────────────────────────────────────────
+function Autocomplete({ value, onChange, onSelect, suggestions, placeholder, loading }) {
+  const [open, setOpen] = useState(false)
+  const filtered = suggestions.filter(s =>
+    s.toLowerCase().includes((value||'').toLowerCase()) && s !== value
+  )
+  const show = open && filtered.length > 0
+
+  return (
+    <div style={{ position:'relative' }}>
+      <input
+        value={value ?? ''}
+        placeholder={placeholder || ''}
+        onChange={e => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        style={{ background:t.surf3, border:`1px solid ${open ? t.accent : t.border}`,
+          color:t.text, padding:'7px 10px', borderRadius:4, fontSize:14,
+          fontFamily:t.mono, width:'100%', outline:'none' }}
+      />
+      {loading && (
+        <div style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)',
+          fontSize:11, color:t.dim, fontFamily:t.mono }}>...</div>
+      )}
+      {show && (
+        <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:200,
+          background:t.surf2, border:`1px solid ${t.accent}`, borderTop:'none',
+          borderRadius:'0 0 4px 4px', maxHeight:200, overflowY:'auto' }}>
+          {filtered.map(s => (
+            <div key={s}
+              onMouseDown={() => { onSelect(s); setOpen(false) }}
+              style={{ padding:'8px 12px', fontSize:14, fontFamily:t.mono,
+                color:t.text, cursor:'pointer', borderBottom:`1px solid ${t.border}33` }}
+              onMouseEnter={e => e.currentTarget.style.background = t.surf3}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── LOGIN + SIGNUP ────────────────────────────────────────
+function Login() {
+  const [mode,    setMode]    = useState('login') // 'login' | 'signup'
+  const [email,   setEmail]   = useState('')
+  const [pass,    setPass]    = useState('')
+  const [pass2,   setPass2]   = useState('')
+  const [name,    setName]    = useState('')
+  const [err,     setErr]     = useState('')
+  const [ok,      setOk]      = useState('')
   const [loading, setLoading] = useState(false)
 
   const submit = async () => {
-    setLoading(true); setErr('')
+    setErr(''); setOk('')
+    if (!email || !pass) { setErr('Email and password required'); return }
+    if (mode === 'signup') {
+      if (pass !== pass2) { setErr('Passwords do not match'); return }
+      if (pass.length < 6) { setErr('Password must be at least 6 characters'); return }
+      setLoading(true)
+      const { error } = await supabase.auth.signUp({
+        email, password: pass,
+        options: { data: { username: name || email } }
+      })
+      if (error) { setErr(error.message); setLoading(false); return }
+      setOk('Account created! You can now sign in.')
+      setMode('login'); setPass(''); setPass2(''); setLoading(false)
+      return
+    }
+    setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({ email, password: pass })
     if (error) setErr(error.message)
     setLoading(false)
@@ -105,7 +168,7 @@ function Login({ onLogin }) {
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center',
       justifyContent:'center', background:t.bg }}>
-      <div style={{ width:340 }}>
+      <div style={{ width:360 }}>
         <div style={{ marginBottom:32 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
             <div style={{ width:4, height:28, background:t.accent, borderRadius:2 }} />
@@ -115,18 +178,115 @@ function Login({ onLogin }) {
             </span>
           </div>
           <div style={{ fontSize:13, color:t.dim, fontFamily:t.mono, marginLeft:14 }}>
-            Parts catalog tool
+            Community parts catalog
           </div>
         </div>
-        <div style={{ background:t.surf, border:`1px solid ${t.border}`,
-          borderRadius:8, padding:24 }}>
+
+        {/* Tab switcher */}
+        <div style={{ display:'flex', marginBottom:16, background:t.surf2,
+          borderRadius:6, padding:3, gap:3 }}>
+          {['login','signup'].map(m => (
+            <button key={m} onClick={() => { setMode(m); setErr(''); setOk('') }}
+              style={{ flex:1, background: mode===m ? t.surf : 'transparent',
+                border: mode===m ? `1px solid ${t.border}` : 'none',
+                color: mode===m ? t.text : t.dim,
+                padding:'8px', borderRadius:4, fontSize:13, fontFamily:t.mono,
+                fontWeight:700, textTransform:'uppercase', cursor:'pointer' }}>
+              {m === 'login' ? 'Sign In' : 'Register'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ background:t.surf, border:`1px solid ${t.border}`, borderRadius:8, padding:24 }}>
+          {ok && <div style={{ color:t.green, fontSize:13, fontFamily:t.mono,
+            marginBottom:12, padding:'8px 10px', background:`${t.green}11`,
+            borderRadius:4, border:`1px solid ${t.green}33` }}>{ok}</div>}
+
+          {mode === 'signup' && (
+            <Row label="Username (optional)">
+              <Input value={name} onChange={setName} placeholder="shanpapa" />
+            </Row>
+          )}
           <Row label="Email"><Input value={email} onChange={setEmail} placeholder="email@example.com" /></Row>
           <Row label="Password"><Input value={pass} onChange={setPass} type="password" placeholder="••••••••" /></Row>
+          {mode === 'signup' && (
+            <Row label="Confirm Password">
+              <Input value={pass2} onChange={setPass2} type="password" placeholder="••••••••" />
+            </Row>
+          )}
           {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, marginBottom:12 }}>{err}</div>}
-          <Btn onClick={submit} disabled={loading}>{loading ? 'Signing in...' : 'Sign In'}</Btn>
+
+          {mode === 'signup' && (
+            <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginBottom:14,
+              padding:'8px 10px', background:t.surf2, borderRadius:4, lineHeight:1.6 }}>
+              New accounts get <b style={{color:t.mid}}>Contributor</b> role — can add and edit parts.
+              Verify rights are granted by admin.
+            </div>
+          )}
+          <Btn onClick={submit} disabled={loading}>
+            {loading ? '...' : mode === 'login' ? 'Sign In' : 'Create Account'}
+          </Btn>
         </div>
       </div>
     </div>
+  )
+}
+
+// ── ADMIN PANEL ───────────────────────────────────────────
+function AdminPanel({ currentUserId, onClose }) {
+  const [users,   setUsers]   = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving,  setSaving]  = useState(null)
+
+  useEffect(() => {
+    supabase.from('profiles').select('*').order('created_at')
+      .then(({ data }) => { setUsers(data || []); setLoading(false) })
+  }, [])
+
+  const toggleRole = async (user) => {
+    const newRole = user.role === 'verifier' ? 'contributor' : 'verifier'
+    setSaving(user.id)
+    await supabase.from('profiles').update({ role: newRole }).eq('id', user.id)
+    setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u))
+    setSaving(null)
+  }
+
+  return (
+    <Modal title="User Management" onClose={onClose} wide>
+      <div style={{ fontSize:13, color:t.dim, fontFamily:t.mono, marginBottom:16 }}>
+        Contributors can add and edit parts. Verifiers can also verify parts and manage users.
+      </div>
+      {loading ? (
+        <div style={{ color:t.dim, fontFamily:t.mono, fontSize:13 }}>Loading users...</div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {users.map(user => (
+            <div key={user.id} style={{ display:'flex', alignItems:'center', gap:12,
+              background:t.surf2, borderRadius:6, padding:'10px 14px' }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, color:t.text, fontFamily:t.mono }}>
+                  {user.username || user.id.slice(0,8)}
+                </div>
+                <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginTop:2 }}>
+                  {user.id === currentUserId ? '(you) ' : ''}
+                  joined {new Date(user.created_at).toLocaleDateString()}
+                </div>
+              </div>
+              <Tag color={user.role === 'verifier' ? t.green : t.blue}>
+                {user.role || 'contributor'}
+              </Tag>
+              {user.id !== currentUserId && (
+                <Btn small variant="ghost"
+                  disabled={saving === user.id}
+                  onClick={() => toggleRole(user)}>
+                  {saving === user.id ? '...' : user.role === 'verifier' ? '↓ Contributor' : '↑ Verifier'}
+                </Btn>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -138,8 +298,31 @@ function CarModal({ car, onClose, onSaved, userId }) {
     stock_class: car?.stock_class || '', stock_pi: car?.stock_pi || '',
     stock_drivetrain: car?.stock_drivetrain || '',
   })
-  const [err, setErr]     = useState('')
+  const [err,    setErr]    = useState('')
   const [saving, setSaving] = useState(false)
+  const [makes,  setMakes]  = useState([])
+  const [models, setModels] = useState([])
+  const [years,  setYears]  = useState([])
+
+  // Load all distinct makes once
+  useEffect(() => {
+    supabase.from('cars').select('make').order('make')
+      .then(({ data }) => setMakes([...new Set((data||[]).map(r => r.make))]))
+  }, [])
+
+  // Load models when make changes
+  useEffect(() => {
+    if (!form.make) { setModels([]); return }
+    supabase.from('cars').select('model').eq('make', form.make).order('model')
+      .then(({ data }) => setModels([...new Set((data||[]).map(r => r.model))]))
+  }, [form.make])
+
+  // Load years when make+model changes
+  useEffect(() => {
+    if (!form.make || !form.model) { setYears([]); return }
+    supabase.from('cars').select('year').eq('make', form.make).eq('model', form.model).order('year')
+      .then(({ data }) => setYears((data||[]).map(r => String(r.year))))
+  }, [form.make, form.model])
 
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
@@ -158,15 +341,30 @@ function CarModal({ car, onClose, onSaved, userId }) {
 
   return (
     <Modal title={isEdit ? 'Edit Car' : 'Add Car'} onClose={onClose}>
-      <Row label="Make"><Input value={form.make} onChange={v => upd('make',v)} placeholder="Nissan" /></Row>
-      <Row label="Model"><Input value={form.model} onChange={v => upd('model',v)} placeholder="Silvia K's" /></Row>
-      <Row label="Year"><Input value={form.year} onChange={v => upd('year',v)} type="number" placeholder="1999" /></Row>
+      <Row label="Make">
+        <Autocomplete value={form.make} onChange={v => upd('make', v)}
+          onSelect={v => upd('make', v)} suggestions={makes} placeholder="Nissan" />
+      </Row>
+      <Row label="Model">
+        <Autocomplete value={form.model} onChange={v => upd('model', v)}
+          onSelect={v => upd('model', v)} suggestions={models} placeholder="Silvia K's" />
+      </Row>
+      <Row label="Year">
+        <Autocomplete value={String(form.year||'')} onChange={v => upd('year', v)}
+          onSelect={v => upd('year', v)} suggestions={years} placeholder="1999" />
+      </Row>
       <HR />
       <Row label="Stock Class">
         <Select value={form.stock_class} onChange={v => upd('stock_class',v)}
           placeholder="— select —" options={['D','C','B','A','S1','S2','X']} />
       </Row>
-      <Row label="Stock PI"><Input value={form.stock_pi} onChange={v => upd('stock_pi',v)} type="number" placeholder="499" /></Row>
+      <Row label="Stock PI">
+        <input type="number" value={form.stock_pi ?? ''} placeholder="499"
+          onChange={e => upd('stock_pi', e.target.value)}
+          style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+            padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+            width:'100%', outline:'none' }} />
+      </Row>
       <Row label="Stock Drivetrain">
         <Select value={form.stock_drivetrain} onChange={v => upd('stock_drivetrain',v)}
           placeholder="— select —" options={['RWD','FWD','AWD']} />
@@ -199,9 +397,38 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   const [err,      setErr]      = useState('')
   const [saving,   setSaving]   = useState(false)
 
+  const [nameOptions, setNameOptions] = useState([])
+  const [prefillNote, setPrefillNote] = useState('')
+
   const subs = CATEGORIES[cat] || []
   const finalCat = useCustomCat ? customCat : cat
   const finalSub = useCustomSub ? customSub : sub
+
+  // Load existing part names for this subcategory
+  useEffect(() => {
+    if (!finalSub) return
+    supabase.from('car_parts').select('name').eq('subcategory', finalSub).order('name')
+      .then(({ data }) => setNameOptions([...new Set((data||[]).map(r => r.name))]))
+  }, [finalSub])
+
+  // When a known name is selected → prefill effects from any existing part with that name
+  const handleNameSelect = async (selectedName) => {
+    setName(selectedName)
+    const { data } = await supabase.from('car_parts')
+      .select('effects, pi_change, price_cr, is_stock')
+      .eq('subcategory', finalSub)
+      .eq('name', selectedName)
+      .limit(1)
+      .single()
+    if (data) {
+      if (data.effects && Object.keys(data.effects).length > 0) {
+        setEffects(data.effects)
+        setPrefillNote('Effects pre-filled from existing entry — update values for this car.')
+      }
+      if (data.is_stock) setIsStock(true)
+      setTimeout(() => setPrefillNote(''), 5000)
+    }
+  }
 
   const setEffect = (k, v) => setEffects(p => {
     const n = { ...p }
@@ -233,36 +460,56 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 20px' }}>
         <Row label="Category">
           {!useCustomCat
-            ? <Select value={cat} onChange={v => { setCat(v); setSub('') }}
+            ? <Select value={cat} onChange={v => { setCat(v); setSub(''); setName(''); setEffects({}) }}
                 options={allCats} />
             : <Input value={customCat} onChange={setCustomCat} placeholder="New category name" />
           }
           <button onClick={() => setUseCustomCat(p => !p)}
-            style={{ background:'none', border:'none', color:t.blue, fontSize:14,
+            style={{ background:'none', border:'none', color:t.blue, fontSize:13,
               fontFamily:t.mono, cursor:'pointer', marginTop:4, padding:0 }}>
             {useCustomCat ? '← Use predefined' : '+ New category'}
           </button>
         </Row>
         <Row label="Subcategory">
           {!useCustomSub
-            ? <Select value={sub} onChange={setSub} placeholder="— select —"
-                options={subs} />
+            ? <Select value={sub} onChange={v => { setSub(v); setName(''); setEffects({}) }}
+                placeholder="— select —" options={subs} />
             : <Input value={customSub} onChange={setCustomSub} placeholder="New subcategory name" />
           }
           <button onClick={() => setUseCustomSub(p => !p)}
-            style={{ background:'none', border:'none', color:t.blue, fontSize:14,
+            style={{ background:'none', border:'none', color:t.blue, fontSize:13,
               fontFamily:t.mono, cursor:'pointer', marginTop:4, padding:0 }}>
             {useCustomSub ? '← Use predefined' : '+ New subcategory'}
           </button>
         </Row>
       </div>
-      <Row label="Part Name"><Input value={name} onChange={setName} placeholder="Sport fék" /></Row>
+      <Row label={`Part Name${nameOptions.length > 0 ? ` (${nameOptions.length} existing in this subcategory)` : ''}`}>
+        <Autocomplete value={name} onChange={setName}
+          onSelect={handleNameSelect}
+          suggestions={nameOptions}
+          placeholder="Sport fék" />
+      </Row>
+      {prefillNote && (
+        <div style={{ fontSize:12, color:t.blue, fontFamily:t.mono, marginBottom:12,
+          padding:'6px 10px', background:`${t.blue}11`, borderRadius:4,
+          border:`1px solid ${t.blue}33` }}>
+          ℹ {prefillNote}
+        </div>
+      )}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 20px' }}>
         <Row label="PI Change">
-          <Input value={piChange} onChange={setPiChange} type="number" step={1} placeholder="0" />
+          <input type="number" value={piChange ?? ''} placeholder="0" step={1}
+            onChange={e => setPiChange(e.target.value)}
+            style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+              padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+              width:'100%', outline:'none' }} />
         </Row>
         <Row label="Price (CR)">
-          <Input value={priceCr} onChange={setPriceCr} type="number" step={100} placeholder="1300" />
+          <input type="number" value={priceCr ?? ''} placeholder="1300" step={100}
+            onChange={e => setPriceCr(e.target.value)}
+            style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+              padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+              width:'100%', outline:'none' }} />
         </Row>
         <Row label="Is Stock?">
           <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
@@ -291,8 +538,11 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
               : f.type === 'select'
               ? <Select value={effects[f.key] || ''} onChange={v => setEffect(f.key, v || undefined)}
                   placeholder="— none —" options={f.options} />
-              : <Input value={effects[f.key] ?? ''} type="number" step={f.step}
-                  onChange={v => setEffect(f.key, v === '' ? undefined : v)} />
+              : <input type="number" value={effects[f.key] ?? ''} step={f.step}
+                  onChange={e => setEffect(f.key, e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                  style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                    padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+                    width:'100%', outline:'none' }} />
             }
           </Row>
         ))}
@@ -308,7 +558,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
 }
 
 // ── CAR DETAIL VIEW ───────────────────────────────────────
-function CarDetail({ car, userId, onBack }) {
+function CarDetail({ car, userId, userRole, onBack }) {
   const [parts,   setParts]   = useState([])
   const [loading, setLoading] = useState(true)
   const [modal,   setModal]   = useState(null) // null | 'add' | {part}
@@ -416,7 +666,7 @@ function CarDetail({ car, userId, onBack }) {
                       </button>
                     </div>
                     {subParts.map(p => (
-                      <PartRow key={p.id} part={p} userId={userId}
+                      <PartRow key={p.id} part={p} userId={userId} userRole={userRole}
                         onEdit={() => setModal(p)}
                         onVerify={() => verify(p)}
                         onDelete={() => deletePart(p.id)} />
@@ -477,10 +727,11 @@ function CarDetail({ car, userId, onBack }) {
 }
 
 // ── PART ROW ──────────────────────────────────────────────
-function PartRow({ part, userId, onEdit, onVerify, onDelete }) {
+function PartRow({ part, userId, userRole, onEdit, onVerify, onDelete }) {
   const [hover, setHover] = useState(false)
-  const isOwner = part.added_by === userId
-  const eff = part.effects || {}
+  const isOwner    = part.added_by === userId
+  const isVerifier = userRole === 'verifier'
+  const eff     = part.effects || {}
   const effKeys = Object.keys(eff).filter(k => eff[k] !== undefined && eff[k] !== false && eff[k] !== '')
 
   return (
@@ -490,8 +741,7 @@ function PartRow({ part, userId, onEdit, onVerify, onDelete }) {
         display:'flex', alignItems:'flex-start', gap:12, transition:'background 0.1s' }}>
       <div style={{ flex:1 }}>
         <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          <span style={{ fontSize:14, color: part.is_stock ? t.dim : t.text,
-            fontFamily:t.mono }}>{part.name}</span>
+          <span style={{ fontSize:14, color: part.is_stock ? t.dim : t.text, fontFamily:t.mono }}>{part.name}</span>
           {part.is_stock && <Tag color={t.dim}>STOCK</Tag>}
           {part.pi_change !== 0 && (
             <Tag color={part.pi_change > 0 ? t.yellow : t.green}>
@@ -499,14 +749,12 @@ function PartRow({ part, userId, onEdit, onVerify, onDelete }) {
             </Tag>
           )}
           {part.price_cr && <Tag color={t.dim}>{part.price_cr.toLocaleString()} CR</Tag>}
-          {part.verified
-            ? <Tag color={t.green}>✓ VERIFIED</Tag>
-            : <Tag color={t.yellow}>UNVERIFIED</Tag>}
+          {part.verified ? <Tag color={t.green}>✓ VERIFIED</Tag> : <Tag color={t.yellow}>UNVERIFIED</Tag>}
         </div>
         {effKeys.length > 0 && (
           <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:5 }}>
             {effKeys.map(k => (
-              <span key={k} style={{ fontSize:14, color:t.dim, fontFamily:t.mono,
+              <span key={k} style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
                 background:t.surf3, padding:'1px 6px', borderRadius:2 }}>
                 {k.replace(/_/g,' ')}: {typeof eff[k]==='boolean'?'yes':eff[k]}
               </span>
@@ -515,10 +763,8 @@ function PartRow({ part, userId, onEdit, onVerify, onDelete }) {
         )}
       </div>
       <div style={{ display:'flex', gap:6, flexShrink:0, opacity: hover ? 1 : 0, transition:'opacity 0.1s' }}>
-        <Btn small variant="ghost" onClick={onVerify}>
-          {part.verified ? 'Unverify' : 'Verify'}
-        </Btn>
-        {isOwner && <Btn small variant="ghost" onClick={onEdit}>Edit</Btn>}
+        {isVerifier && <Btn small variant="ghost" onClick={onVerify}>{part.verified ? 'Unverify' : 'Verify'}</Btn>}
+        {isOwner && !part.verified && <Btn small variant="ghost" onClick={onEdit}>Edit</Btn>}
         {isOwner && <Btn small variant="danger" onClick={onDelete}>Del</Btn>}
       </div>
     </div>
@@ -526,11 +772,12 @@ function PartRow({ part, userId, onEdit, onVerify, onDelete }) {
 }
 
 // ── GARAGE / CAR LIST ─────────────────────────────────────
-function Garage({ userId, onSelectCar }) {
+function Garage({ userId, userRole, onSelectCar }) {
   const [cars,    setCars]    = useState([])
   const [search,  setSearch]  = useState('')
   const [loading, setLoading] = useState(true)
-  const [modal,   setModal]   = useState(null) // null | 'add' | car
+  const [modal,   setModal]   = useState(null)
+  const [showAdmin, setShowAdmin] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -547,17 +794,18 @@ function Garage({ userId, onSelectCar }) {
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
-      {/* Header */}
       <div style={{ background:t.surf, borderBottom:`1px solid ${t.border}`,
         padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ width:4, height:22, background:t.accent, borderRadius:2 }} />
           <span style={{ fontFamily:t.head, fontSize:20, fontWeight:800,
-            textTransform:'uppercase', letterSpacing:'0.08em', color:t.text }}>
-            FH6 Data Entry
-          </span>
+            textTransform:'uppercase', letterSpacing:'0.08em', color:t.text }}>FH6 Data Entry</span>
         </div>
+        <Tag color={userRole === 'verifier' ? t.green : t.blue}>{userRole || 'contributor'}</Tag>
         <div style={{ flex:1 }} />
+        {userRole === 'verifier' && (
+          <Btn variant="ghost" small onClick={() => setShowAdmin(true)}>👥 Users</Btn>
+        )}
         <Btn onClick={() => setModal('add')}>+ Add Car</Btn>
         <button onClick={() => supabase.auth.signOut()}
           style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
@@ -566,7 +814,6 @@ function Garage({ userId, onSelectCar }) {
         </button>
       </div>
 
-      {/* Search */}
       <div style={{ padding:'14px 20px 0', flexShrink:0 }}>
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search cars... (make, model, year)"
@@ -575,7 +822,6 @@ function Garage({ userId, onSelectCar }) {
             width:'100%', outline:'none' }} />
       </div>
 
-      {/* Car list */}
       <div style={{ flex:1, overflowY:'auto', padding:20 }}>
         {loading && <div style={{ color:t.dim, fontSize:14, fontFamily:t.mono }}>Loading...</div>}
         {!loading && filtered.length === 0 && (
@@ -589,19 +835,14 @@ function Garage({ userId, onSelectCar }) {
         )}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px,1fr))', gap:10 }}>
           {filtered.map(car => (
-            <CarCard key={car.id} car={car}
-              onClick={() => onSelectCar(car)}
-              onEdit={() => setModal(car)} />
+            <CarCard key={car.id} car={car} onClick={() => onSelectCar(car)} onEdit={() => setModal(car)} />
           ))}
         </div>
       </div>
 
-      {modal === 'add' && (
-        <CarModal userId={userId} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />
-      )}
-      {modal && modal !== 'add' && (
-        <CarModal car={modal} userId={userId} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />
-      )}
+      {modal === 'add' && <CarModal userId={userId} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
+      {modal && modal !== 'add' && <CarModal car={modal} userId={userId} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
+      {showAdmin && <AdminPanel currentUserId={userId} onClose={() => setShowAdmin(false)} />}
     </div>
   )
 }
@@ -638,17 +879,27 @@ function CarCard({ car, onClick, onEdit }) {
 
 // ── APP ROOT ──────────────────────────────────────────────
 export default function App() {
-  const [session,    setSession]    = useState(null)
-  const [authReady,  setAuthReady]  = useState(false)
+  const [session,     setSession]     = useState(null)
+  const [authReady,   setAuthReady]   = useState(false)
+  const [userRole,    setUserRole]    = useState('contributor')
   const [selectedCar, setSelectedCar] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session); setAuthReady(true)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s)
+    })
     return () => subscription.unsubscribe()
   }, [])
+
+  // Load role when session changes
+  useEffect(() => {
+    if (!session) return
+    supabase.from('profiles').select('role').eq('id', session.user.id).single()
+      .then(({ data }) => { if (data?.role) setUserRole(data.role) })
+  }, [session])
 
   if (!authReady) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center',
@@ -656,13 +907,14 @@ export default function App() {
       fontSize:14, fontFamily:t.mono }}>Loading...</div>
   )
 
-  if (!session) return <Login onLogin={setSession} />
+  if (!session) return <Login />
 
   const userId = session.user.id
 
   if (selectedCar) return (
-    <CarDetail car={selectedCar} userId={userId} onBack={() => setSelectedCar(null)} />
+    <CarDetail car={selectedCar} userId={userId} userRole={userRole}
+      onBack={() => setSelectedCar(null)} />
   )
 
-  return <Garage userId={userId} onSelectCar={setSelectedCar} />
+  return <Garage userId={userId} userRole={userRole} onSelectCar={setSelectedCar} />
 }
