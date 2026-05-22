@@ -290,34 +290,39 @@ function AdminPanel({ currentUserId, onClose }) {
   )
 }
 
-// ── ADD / EDIT CAR MODAL ──────────────────────────────────
 function CarModal({ car, onClose, onSaved, userId }) {
   const isEdit = !!car?.id
   const [form, setForm] = useState({
     make: car?.make || '', model: car?.model || '', year: car?.year || '',
     stock_class: car?.stock_class || '', stock_pi: car?.stock_pi || '',
     stock_drivetrain: car?.stock_drivetrain || '',
+    car_type: car?.car_type || '', country: car?.country || '',
+    collection: car?.collection || '', dlc_pack: car?.dlc_pack || '',
+    is_dlc: car?.is_dlc || false,
   })
   const [err,    setErr]    = useState('')
   const [saving, setSaving] = useState(false)
   const [makes,  setMakes]  = useState([])
   const [models, setModels] = useState([])
   const [years,  setYears]  = useState([])
+  const [carTypes, setCarTypes] = useState([])
+  const [countries, setCountries] = useState([])
 
-  // Load all distinct makes once
   useEffect(() => {
     supabase.from('cars').select('make').order('make')
       .then(({ data }) => setMakes([...new Set((data||[]).map(r => r.make))]))
+    supabase.from('cars').select('car_type').order('car_type')
+      .then(({ data }) => setCarTypes([...new Set((data||[]).map(r => r.car_type).filter(Boolean))]))
+    supabase.from('cars').select('country').order('country')
+      .then(({ data }) => setCountries([...new Set((data||[]).map(r => r.country).filter(Boolean))]))
   }, [])
 
-  // Load models when make changes
   useEffect(() => {
     if (!form.make) { setModels([]); return }
     supabase.from('cars').select('model').eq('make', form.make).order('model')
       .then(({ data }) => setModels([...new Set((data||[]).map(r => r.model))]))
   }, [form.make])
 
-  // Load years when make+model changes
   useEffect(() => {
     if (!form.make || !form.model) { setYears([]); return }
     supabase.from('cars').select('year').eq('make', form.make).eq('model', form.model).order('year')
@@ -329,9 +334,13 @@ function CarModal({ car, onClose, onSaved, userId }) {
   const save = async () => {
     if (!form.make || !form.model || !form.year) { setErr('Make, model and year are required'); return }
     setSaving(true); setErr('')
-    const payload = { ...form, year: parseInt(form.year),
+    const payload = {
+      ...form,
+      year: parseInt(form.year),
       stock_pi: form.stock_pi ? parseInt(form.stock_pi) : null,
-      added_by: userId }
+      dlc_pack: form.dlc_pack || null,
+      added_by: userId,
+    }
     const { error } = isEdit
       ? await supabase.from('cars').update(payload).eq('id', car.id)
       : await supabase.from('cars').insert(payload)
@@ -340,35 +349,71 @@ function CarModal({ car, onClose, onSaved, userId }) {
   }
 
   return (
-    <Modal title={isEdit ? 'Edit Car' : 'Add Car'} onClose={onClose}>
-      <Row label="Make">
-        <Autocomplete value={form.make} onChange={v => upd('make', v)}
-          onSelect={v => upd('make', v)} suggestions={makes} placeholder="Nissan" />
-      </Row>
-      <Row label="Model">
-        <Autocomplete value={form.model} onChange={v => upd('model', v)}
-          onSelect={v => upd('model', v)} suggestions={models} placeholder="Silvia K's" />
-      </Row>
-      <Row label="Year">
-        <Autocomplete value={String(form.year||'')} onChange={v => upd('year', v)}
-          onSelect={v => upd('year', v)} suggestions={years} placeholder="1999" />
-      </Row>
+    <Modal title={isEdit ? 'Edit Car' : 'Add Car'} onClose={onClose} wide>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 16px' }}>
+        <Row label="Make">
+          <Autocomplete value={form.make} onChange={v => upd('make', v)}
+            onSelect={v => upd('make', v)} suggestions={makes} placeholder="Nissan" />
+        </Row>
+        <Row label="Model">
+          <Autocomplete value={form.model} onChange={v => upd('model', v)}
+            onSelect={v => upd('model', v)} suggestions={models} placeholder="Silvia K's" />
+        </Row>
+        <Row label="Year">
+          <Autocomplete value={String(form.year||'')} onChange={v => upd('year', v)}
+            onSelect={v => upd('year', v)} suggestions={years} placeholder="1999" />
+        </Row>
+      </div>
       <HR />
-      <Row label="Stock Class">
-        <Select value={form.stock_class} onChange={v => upd('stock_class',v)}
-          placeholder="— select —" options={['D','C','B','A','S1','S2','X']} />
-      </Row>
-      <Row label="Stock PI">
-        <input type="number" value={form.stock_pi ?? ''} placeholder="499"
-          onChange={e => upd('stock_pi', e.target.value)}
-          style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
-            padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
-            width:'100%', outline:'none' }} />
-      </Row>
-      <Row label="Stock Drivetrain">
-        <Select value={form.stock_drivetrain} onChange={v => upd('stock_drivetrain',v)}
-          placeholder="— select —" options={['RWD','FWD','AWD']} />
-      </Row>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 16px' }}>
+        <Row label="Stock Class">
+          <Select value={form.stock_class} onChange={v => upd('stock_class',v)}
+            placeholder="— select —" options={['D','C','B','A','S1','S2','X']} />
+        </Row>
+        <Row label="Stock PI">
+          <input type="number" value={form.stock_pi ?? ''} placeholder="499"
+            onChange={e => upd('stock_pi', e.target.value)}
+            style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+              padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+              width:'100%', outline:'none' }} />
+        </Row>
+        <Row label="Stock Drivetrain">
+          <Select value={form.stock_drivetrain} onChange={v => upd('stock_drivetrain',v)}
+            placeholder="— select —" options={['RWD','FWD','AWD']} />
+        </Row>
+      </div>
+      <HR />
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
+        <Row label="Car Type">
+          <Autocomplete value={form.car_type} onChange={v => upd('car_type', v)}
+            onSelect={v => upd('car_type', v)} suggestions={carTypes}
+            placeholder="Retro Rally" />
+        </Row>
+        <Row label="Country">
+          <Autocomplete value={form.country} onChange={v => upd('country', v)}
+            onSelect={v => upd('country', v)} suggestions={countries}
+            placeholder="Japan" />
+        </Row>
+        <Row label="Collection">
+          <input value={form.collection ?? ''} placeholder="Autoshow, Wheelspin"
+            onChange={e => upd('collection', e.target.value)}
+            style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+              padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+              width:'100%', outline:'none' }} />
+        </Row>
+        <Row label="DLC Pack">
+          <input value={form.dlc_pack ?? ''} placeholder="Car Pass (optional)"
+            onChange={e => upd('dlc_pack', e.target.value)}
+            style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+              padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+              width:'100%', outline:'none' }} />
+        </Row>
+      </div>
+      <div style={{ display:'flex', alignItems:'center', gap:8, margin:'8px 0 14px' }}>
+        <input type="checkbox" checked={form.is_dlc} onChange={e => upd('is_dlc', e.target.checked)}
+          style={{ accentColor:t.accent, width:14, height:14 }} />
+        <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>DLC car (requires paid content)</span>
+      </div>
       {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, marginBottom:12 }}>{err}</div>}
       <div style={{ display:'flex', gap:8 }}>
         <Btn onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Btn>
