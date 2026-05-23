@@ -477,7 +477,7 @@ function CarModal({ car, onClose, onSaved, userId }) {
 }
 
 // ── PART FORM MODAL ───────────────────────────────────────
-function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, userId }) {
+function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, userId, baseStats }) {
   const isEdit = !!part?.id
   const allCats = Object.keys(CATEGORIES)
   const [cat,  setCat]  = useState(part?.category    || prefillCat || allCats[0])
@@ -494,6 +494,8 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   const [effects,  setEffects]  = useState(part?.effects  || {})
   const [err,      setErr]      = useState('')
   const [saving,   setSaving]   = useState(false)
+  const [inputMode, setInputMode] = useState('delta') // 'delta' | 'actual'
+  const [actualVals, setActualVals] = useState({})
 
   const [nameOptions, setNameOptions] = useState([])
   const [prefillNote, setPrefillNote] = useState('')
@@ -539,19 +541,37 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
     if (!name)     { setErr('Part name is required'); return }
     if (!finalSub) { setErr('Subcategory is required'); return }
     setSaving(true); setErr('')
+
+    // Actual mode: compute deltas ONLY where base stat exists — skip the rest
+    let finalEffects = { ...effects }
+    if (inputMode === 'actual') {
+      EFFECT_FIELDS.filter(f => f.type === 'number').forEach(f => {
+        const actual = actualVals[f.key]
+        if (actual === '' || actual === undefined) return
+        const base = (baseStats || {})[f.key]
+        if (base !== undefined && base !== null && base !== '') {
+          // Has base stat → save delta
+          finalEffects[f.key] = parseFloat((parseFloat(actual) - parseFloat(base)).toFixed(4))
+        }
+        // No base stat → do NOT save this field (skip entirely)
+      })
+    }
+
     const payload = {
       car_id: carId, category: finalCat, subcategory: finalSub,
       name, is_stock: isStock,
       pi_change: piChange !== '' ? parseInt(piChange) : 0,
       price_cr: priceCr !== '' ? parseInt(priceCr) : null,
-      effects, added_by: userId,
+      effects: finalEffects, added_by: userId,
     }
     const { error } = isEdit
       ? await supabase.from('car_parts').update(payload).eq('id', part.id)
       : await supabase.from('car_parts').insert(payload)
-    if (error) { setErr(error.message); setSaving(false); return }
+    if (error) { setErr(`Save failed: ${error.message}`); setSaving(false); return }
     onSaved()
   }
+
+  const hasBaseStats = baseStats && Object.keys(baseStats).length > 0
 
   return (
     <Modal title={isEdit ? 'Edit Part' : 'Add Part'} onClose={onClose} wide>
@@ -618,13 +638,35 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         </Row>
       </div>
       <HR />
-      <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono,
-        textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:4 }}>
-        Effects — fill in what changed (+/- from base)
+      {/* Mode toggle */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+        marginBottom:8 }}>
+        <div>
+          <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono,
+            textTransform:'uppercase', letterSpacing:'0.12em' }}>Effects</div>
+          <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginTop:2 }}>
+            {inputMode === 'delta'
+              ? 'Enter the change (+/-) directly from the game.'
+              : hasBaseStats
+                ? 'Enter the value shown in-game after installing. Delta auto-calculated.'
+                : '⚠ No base stats on this car — actual mode will save values as-is.'}
+          </div>
+        </div>
+        <div style={{ display:'flex', background:t.surf2, borderRadius:6,
+          padding:3, gap:3, flexShrink:0 }}>
+          {[['delta','Δ Delta'],['actual','= Actual']].map(([mode, label]) => (
+            <button key={mode} onClick={() => setInputMode(mode)}
+              style={{ background: inputMode===mode ? t.surf3 : 'transparent',
+                border: inputMode===mode ? `1px solid ${t.accent}` : '1px solid transparent',
+                color: inputMode===mode ? t.accent : t.dim,
+                padding:'5px 12px', borderRadius:4, fontSize:12, fontFamily:t.mono,
+                cursor:'pointer', fontWeight:700 }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginBottom:12 }}>
-        Leave empty if unknown. Negative values = decrease (e.g. weight reduction).
-      </div>
+
       {['Main Stats','Engine','Braking','Lateral G','Speed','Aero','Flags'].map(group => {
         const fields = EFFECT_FIELDS.filter(f => f.group === group)
         return (
@@ -633,28 +675,69 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
               letterSpacing:'0.1em', marginBottom:8, borderBottom:`1px solid ${t.border}33`,
               paddingBottom:4 }}>{group}</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0 16px' }}>
-              {fields.map(f => (
-                <Row key={f.key} label={f.label}>
-                  {f.type === 'bool'
-                    ? <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
-                        <input type="checkbox"
-                          checked={!!effects[f.key]}
-                          onChange={e => setEffect(f.key, e.target.checked || undefined)}
-                          style={{ accentColor:t.accent, width:14, height:14 }} />
-                        <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>Yes</span>
-                      </div>
-                    : f.type === 'select'
-                    ? <Select value={effects[f.key] || ''} onChange={v => setEffect(f.key, v || undefined)}
-                        placeholder="— none —" options={f.options} />
-                    : <input type="number" value={effects[f.key] ?? ''} step={f.step}
-                        placeholder="—"
-                        onChange={e => setEffect(f.key, e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                        style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
-                          padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
-                          width:'100%', outline:'none' }} />
-                  }
-                </Row>
-              ))}
+              {fields.map(f => {
+                const isNumeric = f.type === 'number'
+                const useActual = inputMode === 'actual' && isNumeric
+                const baseVal   = (baseStats || {})[f.key]
+                const hasBase   = baseVal !== undefined && baseVal !== null && baseVal !== ''
+
+                return (
+                  <Row key={f.key} label={
+                    useActual && hasBase
+                      ? `${f.label} (base: ${baseVal})`
+                      : f.label
+                  }>
+                    {f.type === 'bool'
+                      ? <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
+                          <input type="checkbox"
+                            checked={!!effects[f.key]}
+                            onChange={e => setEffect(f.key, e.target.checked || undefined)}
+                            style={{ accentColor:t.accent, width:14, height:14 }} />
+                          <span style={{ fontSize:13, color:t.mid, fontFamily:t.mono }}>Yes</span>
+                        </div>
+                      : f.type === 'select'
+                      ? <Select value={effects[f.key] || ''} onChange={v => setEffect(f.key, v || undefined)}
+                          placeholder="— none —" options={f.options} />
+                      : useActual
+                      ? <div>
+                          {hasBase
+                            ? <>
+                                <input type="number"
+                                  value={actualVals[f.key] ?? ''}
+                                  step={f.step}
+                                  placeholder={String(baseVal)}
+                                  onChange={e => setActualVals(p => ({
+                                    ...p,
+                                    [f.key]: e.target.value === '' ? undefined : e.target.value
+                                  }))}
+                                  style={{ background:t.surf3,
+                                    border:`1px solid ${actualVals[f.key] !== undefined ? t.blue : t.border}`,
+                                    color:t.text, padding:'7px 10px', borderRadius:4, fontSize:14,
+                                    fontFamily:t.mono, width:'100%', outline:'none' }} />
+                                {actualVals[f.key] !== undefined && actualVals[f.key] !== '' && (
+                                  <div style={{ fontSize:11, color:t.blue, fontFamily:t.mono, marginTop:2 }}>
+                                    Δ {parseFloat((parseFloat(actualVals[f.key]) - parseFloat(baseVal)).toFixed(4)) >= 0 ? '+' : ''}
+                                    {parseFloat((parseFloat(actualVals[f.key]) - parseFloat(baseVal)).toFixed(4))}
+                                  </div>
+                                )}
+                              </>
+                            : <div style={{ padding:'7px 10px', background:t.surf2,
+                                border:`1px solid ${t.border}33`, borderRadius:4,
+                                fontSize:11, color:t.dim, fontFamily:t.mono }}>
+                                No base stat — set on car first
+                              </div>
+                          }
+                        </div>
+                      : <input type="number" value={effects[f.key] ?? ''} step={f.step}
+                          placeholder="—"
+                          onChange={e => setEffect(f.key, e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                          style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                            padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+                            width:'100%', outline:'none' }} />
+                    }
+                  </Row>
+                )
+              })}
             </div>
           </div>
         )
@@ -868,13 +951,13 @@ function CarDetail({ car, userId, userRole, onBack }) {
 
       {/* Modals */}
       {modal === 'add' && (
-        <PartModal carId={car.id} userId={userId}
+        <PartModal carId={car.id} userId={userId} baseStats={car.base_stats || {}}
           prefillCat={prefCat} prefillSub={prefSub}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); setExpanded(p => ({ ...p, [prefCat]: true })) }} />
       )}
       {modal && modal !== 'add' && (
-        <PartModal part={modal} carId={car.id} userId={userId}
+        <PartModal part={modal} carId={car.id} userId={userId} baseStats={car.base_stats || {}}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load() }} />
       )}
