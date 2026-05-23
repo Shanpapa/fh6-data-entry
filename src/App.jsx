@@ -1034,6 +1034,331 @@ function PartRow({ part, userId, userRole, onEdit, onVerify, onDelete }) {
   )
 }
 
+import Papa from 'papaparse'
+
+// ── CSV IMPORT CONSTANTS ──────────────────────────────────
+const IMPORT_COLUMNS = [
+  'car_id','category','subcategory','name','is_stock','pi_change','price_cr',
+  'stat_speed','stat_handling','stat_acceleration','stat_launch','stat_braking','stat_offroad',
+  'power_hp','torque_nm','weight_kg','top_speed_kmh','accel_0_97','accel_0_161',
+  'brake_dist_97','brake_dist_161','lateral_g_97','lateral_g_193',
+  'aero_efficiency','aero_balance','mech_balance',
+  'compound_type','unlocks_tuning','unlock_type'
+]
+const EFFECT_KEYS = [
+  'stat_speed','stat_handling','stat_acceleration','stat_launch','stat_braking','stat_offroad',
+  'power_hp','torque_nm','weight_kg','top_speed_kmh','accel_0_97','accel_0_161',
+  'brake_dist_97','brake_dist_161','lateral_g_97','lateral_g_193',
+  'aero_efficiency','aero_balance','mech_balance',
+  'compound_type','unlocks_tuning','unlock_type'
+]
+const NUMERIC_KEYS = [
+  'pi_change','price_cr',
+  'stat_speed','stat_handling','stat_acceleration','stat_launch','stat_braking','stat_offroad',
+  'power_hp','torque_nm','weight_kg','top_speed_kmh','accel_0_97','accel_0_161',
+  'brake_dist_97','brake_dist_161','lateral_g_97','lateral_g_193',
+  'aero_efficiency','aero_balance','mech_balance'
+]
+
+function downloadCSV(filename, rows) {
+  const csv = Papa.unparse(rows)
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
+function buildEffects(row) {
+  const effects = {}
+  EFFECT_KEYS.forEach(k => {
+    const v = row[k]
+    if (v === undefined || v === null || v === '') return
+    if (k === 'unlocks_tuning') {
+      if (v === 'true' || v === '1' || v === true) effects[k] = true
+      return
+    }
+    if (NUMERIC_KEYS.includes(k)) {
+      const n = parseFloat(v)
+      if (!isNaN(n) && n !== 0) effects[k] = n
+    } else {
+      if (String(v).trim()) effects[k] = String(v).trim()
+    }
+  })
+  return effects
+}
+
+function validateRows(rows, knownCarIds) {
+  return rows.map((row, i) => {
+    const errors = [], warnings = []
+    if (!row.car_id?.trim())  errors.push('Missing car_id')
+    if (!row.category?.trim()) errors.push('Missing category')
+    if (!row.name?.trim())    errors.push('Missing name')
+    if (row.car_id && !knownCarIds.has(row.car_id.trim())) warnings.push('Unknown car_id')
+    NUMERIC_KEYS.forEach(k => {
+      if (row[k] !== undefined && row[k] !== '' && isNaN(parseFloat(row[k])))
+        errors.push(`${k} is not a number`)
+    })
+    return { ...row, _row: i + 2, _errors: errors, _warnings: warnings,
+             _valid: errors.length === 0 }
+  })
+}
+
+// ── IMPORT VIEW ───────────────────────────────────────────
+function ImportView({ onBack, userId }) {
+  const [loadingCars, setLoadingCars] = useState(false)
+  const [rows,        setRows]        = useState([])
+  const [validated,   setValidated]   = useState([])
+  const [knownCars,   setKnownCars]   = useState([])
+  const [importing,   setImporting]   = useState(false)
+  const [result,      setResult]      = useState(null)
+  const [fileErr,     setFileErr]     = useState('')
+
+  // Download import template
+  const downloadTemplate = () => {
+    downloadCSV('fh6_parts_import_template.csv',
+      [Object.fromEntries(IMPORT_COLUMNS.map(c => [c, '']))])
+  }
+
+  // Download car lookup
+  const downloadLookup = async () => {
+    setLoadingCars(true)
+    const { data } = await supabase.from('cars')
+      .select('id,make,model,year').eq('verified', true).order('make').order('model')
+    if (data) downloadCSV('fh6_car_lookup.csv',
+      data.map(c => ({ car_id: c.id, make: c.make, model: c.model, year: c.year })))
+    setLoadingCars(false)
+  }
+
+  // Load known car IDs for validation
+  const loadKnownCars = async () => {
+    const { data } = await supabase.from('cars').select('id,make,model,year')
+    return data || []
+  }
+
+  // Parse uploaded CSV
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFileErr(''); setRows([]); setValidated([]); setResult(null)
+    const cars = await loadKnownCars()
+    setKnownCars(cars)
+    const carIdSet = new Set(cars.map(c => c.id))
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete: ({ data, errors }) => {
+        if (errors.length > 0) { setFileErr(`Parse error: ${errors[0].message}`); return }
+        if (data.length === 0) { setFileErr('File is empty'); return }
+        const v = validateRows(data, carIdSet)
+        setRows(data); setValidated(v)
+      },
+      error: (err) => setFileErr(`Failed to read file: ${err.message}`)
+    })
+    e.target.value = ''
+  }
+
+  // Import valid rows
+  const handleImport = async () => {
+    const valid = validated.filter(r => r._valid)
+    if (valid.length === 0) return
+    setImporting(true); setResult(null)
+    const payload = valid.map(row => ({
+      car_id:     row.car_id.trim(),
+      category:   row.category.trim(),
+      subcategory:(row.subcategory || '').trim(),
+      name:        row.name.trim(),
+      is_stock:    row.is_stock === 'true' || row.is_stock === '1',
+      pi_change:   row.pi_change !== '' ? parseInt(row.pi_change) : 0,
+      price_cr:    row.price_cr  !== '' ? parseInt(row.price_cr)  : null,
+      effects:     buildEffects(row),
+      added_by:    userId,
+    }))
+
+    // Batch insert in chunks of 100
+    let inserted = 0, skipped = 0
+    for (let i = 0; i < payload.length; i += 100) {
+      const chunk = payload.slice(i, i + 100)
+      const { error, data } = await supabase.from('car_parts').insert(chunk)
+      if (error) { skipped += chunk.length; console.error('Batch error:', error) }
+      else inserted += chunk.length
+    }
+    setImporting(false)
+    setResult({ inserted, skipped, total: payload.length })
+  }
+
+  const validCount   = validated.filter(r => r._valid).length
+  const invalidCount = validated.filter(r => !r._valid).length
+  const warnCount    = validated.filter(r => r._valid && r._warnings.length > 0).length
+  const carCount     = new Set(validated.filter(r => r._valid).map(r => r.car_id)).size
+  const preview      = validated.slice(0, 10)
+
+  return (
+    <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
+      {/* Header */}
+      <div style={{ background:t.surf, borderBottom:`1px solid ${t.border}`,
+        padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        <button onClick={onBack} style={{ background:'none', border:`1px solid ${t.border}`,
+          color:t.dim, padding:'5px 12px', borderRadius:4, fontSize:13,
+          fontFamily:t.mono, cursor:'pointer', textTransform:'uppercase' }}>← Back</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontFamily:t.head, fontSize:22, fontWeight:800,
+            textTransform:'uppercase', letterSpacing:'0.05em', color:t.text }}>
+            CSV Import
+          </div>
+          <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginTop:2 }}>
+            Bulk import car parts from spreadsheet
+          </div>
+        </div>
+      </div>
+
+      <div style={{ flex:1, overflowY:'auto', padding:20 }}>
+        <div style={{ maxWidth:960 }}>
+
+          {/* Step 1 — Download templates */}
+          <div style={{ background:t.surf, border:`1px solid ${t.border}`,
+            borderRadius:6, padding:18, marginBottom:16 }}>
+            <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono,
+              textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:10 }}>
+              Step 1 — Download Templates
+            </div>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              <Btn variant="ghost" onClick={downloadTemplate}>
+                ↓ Import Template CSV
+              </Btn>
+              <Btn variant="ghost" onClick={downloadLookup} disabled={loadingCars}>
+                {loadingCars ? 'Loading...' : '↓ Car Lookup CSV (VLOOKUP source)'}
+              </Btn>
+            </div>
+            <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono, marginTop:10,
+              lineHeight:1.6 }}>
+              Fill the template in Excel/Google Sheets. Use VLOOKUP with the car lookup file
+              to get the correct <span style={{color:t.accent}}>car_id</span> for each row.
+              Save as CSV when done.
+            </div>
+          </div>
+
+          {/* Step 2 — Upload */}
+          <div style={{ background:t.surf, border:`1px solid ${t.border}`,
+            borderRadius:6, padding:18, marginBottom:16 }}>
+            <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono,
+              textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:10 }}>
+              Step 2 — Upload CSV
+            </div>
+            <label style={{ display:'inline-block', cursor:'pointer' }}>
+              <div style={{ background:t.surf2, border:`2px dashed ${t.border}`,
+                borderRadius:6, padding:'20px 32px', textAlign:'center',
+                fontSize:13, fontFamily:t.mono, color:t.mid,
+                transition:'border-color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = t.accent}
+                onMouseLeave={e => e.currentTarget.style.borderColor = t.border}>
+                Click to select .csv file
+              </div>
+              <input type="file" accept=".csv" onChange={handleFile}
+                style={{ display:'none' }} />
+            </label>
+            {fileErr && <div style={{ color:t.red, fontSize:12, fontFamily:t.mono,
+              marginTop:8 }}>{fileErr}</div>}
+          </div>
+
+          {/* Step 3 — Preview + Import */}
+          {validated.length > 0 && (
+            <div style={{ background:t.surf, border:`1px solid ${t.border}`,
+              borderRadius:6, padding:18, marginBottom:16 }}>
+              <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono,
+                textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:12 }}>
+                Step 3 — Preview & Import
+              </div>
+
+              {/* Summary */}
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
+                <Tag color={t.green}>{validCount} valid rows</Tag>
+                <Tag color={t.blue}>{carCount} cars</Tag>
+                {warnCount > 0 && <Tag color={t.yellow}>{warnCount} warnings</Tag>}
+                {invalidCount > 0 && <Tag color={t.red}>{invalidCount} invalid (will be skipped)</Tag>}
+              </div>
+
+              {/* Preview table */}
+              <div style={{ overflowX:'auto', marginBottom:14 }}>
+                <table style={{ width:'100%', borderCollapse:'collapse',
+                  fontSize:11, fontFamily:t.mono }}>
+                  <thead>
+                    <tr style={{ background:t.surf2 }}>
+                      {['Row','Status','car_id','category','subcategory','name','pi_change','Warnings/Errors'].map(h => (
+                        <th key={h} style={{ padding:'6px 10px', textAlign:'left',
+                          color:t.dim, fontSize:10, textTransform:'uppercase',
+                          letterSpacing:'0.08em', borderBottom:`1px solid ${t.border}`,
+                          whiteSpace:'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map((row, i) => (
+                      <tr key={i} style={{ background: i%2===0 ? t.surf : t.surf2 }}>
+                        <td style={{ padding:'5px 10px', color:t.dim }}>{row._row}</td>
+                        <td style={{ padding:'5px 10px' }}>
+                          {row._valid
+                            ? <span style={{ color:t.green }}>✓</span>
+                            : <span style={{ color:t.red }}>✗</span>}
+                        </td>
+                        <td style={{ padding:'5px 10px', color:t.text, maxWidth:120,
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {row.car_id?.slice(0,8)}…
+                        </td>
+                        <td style={{ padding:'5px 10px', color:t.mid }}>{row.category}</td>
+                        <td style={{ padding:'5px 10px', color:t.mid }}>{row.subcategory}</td>
+                        <td style={{ padding:'5px 10px', color:t.text }}>{row.name}</td>
+                        <td style={{ padding:'5px 10px', color:t.yellow }}>{row.pi_change}</td>
+                        <td style={{ padding:'5px 10px', fontSize:10,
+                          color: row._errors.length ? t.red : t.yellow }}>
+                          {[...row._errors, ...row._warnings].join(', ') || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {validated.length > 10 && (
+                  <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
+                    padding:'6px 10px', background:t.surf2 }}>
+                    … and {validated.length - 10} more rows (showing first 10)
+                  </div>
+                )}
+              </div>
+
+              {/* Import button */}
+              {!result && (
+                <Btn onClick={handleImport} disabled={importing || validCount === 0}>
+                  {importing ? `Importing ${validCount} rows...` : `Import ${validCount} valid rows`}
+                </Btn>
+              )}
+
+              {/* Result */}
+              {result && (
+                <div style={{ background:t.surf2, border:`1px solid ${t.green}44`,
+                  borderRadius:6, padding:'12px 16px' }}>
+                  <div style={{ fontSize:13, fontFamily:t.mono }}>
+                    <span style={{ color:t.green }}>✓ Imported: {result.inserted} rows</span>
+                    {result.skipped > 0 && (
+                      <span style={{ color:t.red, marginLeft:16 }}>
+                        ✗ Failed: {result.skipped} rows
+                      </span>
+                    )}
+                  </div>
+                  {result.skipped > 0 && (
+                    <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono, marginTop:4 }}>
+                      Failed rows may already exist (duplicate car_id + category + name).
+                      Check browser console for details.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── DESCRIPTIONS VIEW ─────────────────────────────────────
 function DescriptionsView({ onBack }) {
   const [items,   setItems]   = useState([])
@@ -1220,6 +1545,7 @@ function Garage({ userId, userRole, onSelectCar }) {
   const [modal,   setModal]   = useState(null)
   const [showAdmin, setShowAdmin] = useState(false)
   const [showDesc,  setShowDesc]  = useState(false)
+  const [showImport,setShowImport]= useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1249,6 +1575,7 @@ function Garage({ userId, userRole, onSelectCar }) {
           <Btn variant="ghost" small onClick={() => setShowAdmin(true)}>👥 Users</Btn>
         )}
         <Btn variant="ghost" small onClick={() => setShowDesc(true)}>📋 Descriptions</Btn>
+        <Btn variant="ghost" small onClick={() => setShowImport(true)}>⬆ Import CSV</Btn>
         <Btn onClick={() => setModal('add')}>+ Add Car</Btn>
         <button onClick={() => supabase.auth.signOut()}
           style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
@@ -1288,6 +1615,9 @@ function Garage({ userId, userRole, onSelectCar }) {
       {showAdmin && <AdminPanel currentUserId={userId} onClose={() => setShowAdmin(false)} />}
       {showDesc && <div style={{ position:'fixed', inset:0, zIndex:50, background:t.bg }}>
         <DescriptionsView onBack={() => setShowDesc(false)} />
+      </div>}
+      {showImport && <div style={{ position:'fixed', inset:0, zIndex:50, background:t.bg }}>
+        <ImportView onBack={() => setShowImport(false)} userId={userId} />
       </div>}
     </div>
   )
