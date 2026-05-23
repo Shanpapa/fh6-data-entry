@@ -1053,8 +1053,8 @@ export default function App() {
   // Load role when session changes
   useEffect(() => {
     if (!session) return
-    supabase.from('profiles').select('role').eq('id', session.user.id).single()
-      .then(({ data }) => { if (data?.role) setUserRole(data.role) })
+    // Data entry tool is editor-only — all users have full (verifier) rights
+    setUserRole('verifier')
   }, [session])
 
   if (!authReady) return (
