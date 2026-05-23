@@ -366,6 +366,7 @@ function CarModal({ car, onClose, onSaved, userId }) {
 
   // Group CAR_STAT_FIELDS by section for display
   const statGroups = [
+    { label:'Main Stats',keys:['stat_speed','stat_handling','stat_acceleration','stat_launch','stat_braking','stat_offroad'] },
     { label:'Engine',   keys:['power_hp','torque_nm','weight_kg','pwr_hp_kg','displacement_cc','top_speed_kmh'] },
     { label:'Timing',   keys:['accel_0_97','accel_0_161','brake_dist_97','brake_dist_161'] },
     { label:'Dynamics', keys:['lateral_g_97','lateral_g_193','mech_balance','aero_balance','aero_efficiency'] },
@@ -477,7 +478,7 @@ function CarModal({ car, onClose, onSaved, userId }) {
 }
 
 // ── PART FORM MODAL ───────────────────────────────────────
-function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, userId, baseStats }) {
+function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, userId, baseStats, car }) {
   const isEdit = !!part?.id
   const allCats = Object.keys(CATEGORIES)
   const [cat,  setCat]  = useState(part?.category    || prefillCat || allCats[0])
@@ -557,10 +558,16 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
       })
     }
 
+    // Compute PI change
+    let finalPiChange = piChange !== '' ? parseInt(piChange) : 0
+    if (inputMode === 'actual' && actualVals['_pi'] !== undefined && car?.stock_pi) {
+      finalPiChange = parseInt(actualVals['_pi']) - parseInt(car.stock_pi)
+    }
+
     const payload = {
       car_id: carId, category: finalCat, subcategory: finalSub,
       name, is_stock: isStock,
-      pi_change: piChange !== '' ? parseInt(piChange) : 0,
+      pi_change: finalPiChange,
       price_cr: priceCr !== '' ? parseInt(priceCr) : null,
       effects: finalEffects, added_by: userId,
     }
@@ -615,12 +622,29 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         </div>
       )}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 20px' }}>
-        <Row label="PI Change">
-          <input type="number" value={piChange ?? ''} placeholder="0" step={1}
-            onChange={e => setPiChange(e.target.value)}
-            style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
-              padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
-              width:'100%', outline:'none' }} />
+        <Row label={inputMode === 'actual' && hasBaseStats ? `PI (base: ${car?.stock_pi ?? '?'})` : 'PI Change'}>
+          <div>
+            <input type="number"
+              value={inputMode === 'actual' ? (actualVals['_pi'] ?? '') : (piChange ?? '')}
+              placeholder={inputMode === 'actual' ? String(car?.stock_pi ?? '—') : '0'}
+              step={1}
+              onChange={e => {
+                if (inputMode === 'actual') {
+                  setActualVals(p => ({ ...p, _pi: e.target.value === '' ? undefined : e.target.value }))
+                } else {
+                  setPiChange(e.target.value)
+                }
+              }}
+              style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+                width:'100%', outline:'none' }} />
+            {inputMode === 'actual' && actualVals['_pi'] !== undefined && car?.stock_pi && (
+              <div style={{ fontSize:11, color:t.blue, fontFamily:t.mono, marginTop:2 }}>
+                Δ {(parseInt(actualVals['_pi']) - parseInt(car.stock_pi)) >= 0 ? '+' : ''}
+                {parseInt(actualVals['_pi']) - parseInt(car.stock_pi)}
+              </div>
+            )}
+          </div>
         </Row>
         <Row label="Price (CR)">
           <input type="number" value={priceCr ?? ''} placeholder="1300" step={100}
@@ -951,13 +975,13 @@ function CarDetail({ car, userId, userRole, onBack }) {
 
       {/* Modals */}
       {modal === 'add' && (
-        <PartModal carId={car.id} userId={userId} baseStats={car.base_stats || {}}
+        <PartModal carId={car.id} userId={userId} car={car} baseStats={car.base_stats || {}}
           prefillCat={prefCat} prefillSub={prefSub}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); setExpanded(p => ({ ...p, [prefCat]: true })) }} />
       )}
       {modal && modal !== 'add' && (
-        <PartModal part={modal} carId={car.id} userId={userId} baseStats={car.base_stats || {}}
+        <PartModal part={modal} carId={car.id} userId={userId} car={car} baseStats={car.base_stats || {}}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load() }} />
       )}

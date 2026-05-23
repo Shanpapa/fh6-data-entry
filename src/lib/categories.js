@@ -99,19 +99,29 @@ export const EFFECT_FIELDS = [
 
 // Car base stats fields (stored in cars.base_stats JSONB)
 export const CAR_STAT_FIELDS = [
-  { key:'power_hp',       label:'Power (HP)',           type:'number', step:1    },
-  { key:'torque_nm',      label:'Torque (Nm)',          type:'number', step:1    },
-  { key:'weight_kg',      label:'Weight (kg)',          type:'number', step:1    },
-  { key:'pwr_hp_kg',      label:'PWR (hp/kg)',          type:'number', step:0.01 },
-  { key:'displacement_cc',label:'Displacement (cc)',    type:'number', step:1    },
-  { key:'top_speed_kmh',  label:'Top Speed (km/h)',     type:'number', step:0.1  },
-  { key:'accel_0_97',     label:'0-97 km/h (s)',        type:'number', step:0.001},
-  { key:'accel_0_161',    label:'0-161 km/h (s)',       type:'number', step:0.001},
-  { key:'brake_dist_97',  label:'Braking 97 km/h (m)',  type:'number', step:0.1  },
-  { key:'brake_dist_161', label:'Braking 161 km/h (m)', type:'number', step:0.1  },
-  { key:'lateral_g_97',   label:'Lateral G @ 97 km/h',  type:'number', step:0.01 },
-  { key:'lateral_g_193',  label:'Lateral G @ 193 km/h', type:'number', step:0.01 },
-  { key:'mech_balance',   label:'Mech. Balance',        type:'number', step:0.01 },
-  { key:'aero_balance',   label:'Aero Balance',         type:'number', step:0.01 },
-  { key:'aero_efficiency',label:'Aero Efficiency',      type:'number', step:0.001},
+  // Main Stats (in-game 0–10 scale)
+  { key:'stat_speed',        label:'Speed',           type:'number', step:0.1, group:'Main Stats' },
+  { key:'stat_handling',     label:'Handling',        type:'number', step:0.1, group:'Main Stats' },
+  { key:'stat_acceleration', label:'Acceleration',    type:'number', step:0.1, group:'Main Stats' },
+  { key:'stat_launch',       label:'Launch',          type:'number', step:0.1, group:'Main Stats' },
+  { key:'stat_braking',      label:'Braking',         type:'number', step:0.1, group:'Main Stats' },
+  { key:'stat_offroad',      label:'Offroad',         type:'number', step:0.1, group:'Main Stats' },
+  // Engine
+  { key:'power_hp',          label:'Power (HP)',           type:'number', step:1     },
+  { key:'torque_nm',         label:'Torque (Nm)',          type:'number', step:1     },
+  { key:'weight_kg',         label:'Weight (kg)',          type:'number', step:1     },
+  { key:'pwr_hp_kg',         label:'PWR (hp/kg)',          type:'number', step:0.01  },
+  { key:'displacement_cc',   label:'Displacement (cc)',    type:'number', step:1     },
+  { key:'top_speed_kmh',     label:'Top Speed (km/h)',     type:'number', step:0.1   },
+  // Timing
+  { key:'accel_0_97',        label:'0-97 km/h (s)',        type:'number', step:0.001 },
+  { key:'accel_0_161',       label:'0-161 km/h (s)',       type:'number', step:0.001 },
+  { key:'brake_dist_97',     label:'Braking 97 km/h (m)',  type:'number', step:0.1   },
+  { key:'brake_dist_161',    label:'Braking 161 km/h (m)', type:'number', step:0.1   },
+  // Dynamics
+  { key:'lateral_g_97',      label:'Lateral G @ 97 km/h',  type:'number', step:0.01  },
+  { key:'lateral_g_193',     label:'Lateral G @ 193 km/h', type:'number', step:0.01  },
+  { key:'mech_balance',      label:'Mech. Balance',        type:'number', step:0.01  },
+  { key:'aero_balance',      label:'Aero Balance',         type:'number', step:0.01  },
+  { key:'aero_efficiency',   label:'Aero Efficiency',      type:'number', step:0.001 },
 ]
