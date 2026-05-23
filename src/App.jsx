@@ -340,17 +340,27 @@ function CarModal({ car, onClose, onSaved, userId }) {
   const save = async () => {
     if (!form.make || !form.model || !form.year) { setErr('Make, model and year are required'); return }
     setSaving(true); setErr('')
-    const payload = {
-      ...form, year: parseInt(form.year),
+    const common = {
+      make: form.make, model: form.model, year: parseInt(form.year),
+      stock_class: form.stock_class || null,
       stock_pi: form.stock_pi ? parseInt(form.stock_pi) : null,
+      stock_drivetrain: form.stock_drivetrain || null,
+      car_type: form.car_type || null,
+      country: form.country || null,
+      collection: form.collection || null,
       dlc_pack: form.dlc_pack || null,
+      is_dlc: form.is_dlc || false,
       base_stats: Object.keys(baseStats).length > 0 ? baseStats : null,
-      added_by: userId,
     }
     const { error } = isEdit
-      ? await supabase.from('cars').update(payload).eq('id', car.id)
-      : await supabase.from('cars').insert(payload)
-    if (error) { setErr(error.message); setSaving(false); return }
+      ? await supabase.from('cars').update(common).eq('id', car.id)
+      : await supabase.from('cars').insert({ ...common, added_by: userId })
+    if (error) {
+      console.error('Save error:', error)
+      setErr(`Save failed: ${error.message}`)
+      setSaving(false)
+      return
+    }
     onSaved()
   }
 
