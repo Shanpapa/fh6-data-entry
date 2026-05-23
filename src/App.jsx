@@ -1034,6 +1034,184 @@ function PartRow({ part, userId, userRole, onEdit, onVerify, onDelete }) {
   )
 }
 
+// ── DESCRIPTIONS VIEW ─────────────────────────────────────
+function DescriptionsView({ onBack }) {
+  const [items,   setItems]   = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modal,   setModal]   = useState(null) // null | 'add' | item
+  const [delConfirm, setDelConfirm] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase.from('descriptions').select('*').order('key')
+    setItems(data || [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleDelete = async (id) => {
+    await supabase.from('descriptions').delete().eq('id', id)
+    setDelConfirm(null)
+    load()
+  }
+
+  return (
+    <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
+      {/* Header */}
+      <div style={{ background:t.surf, borderBottom:`1px solid ${t.border}`,
+        padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+        <button onClick={onBack} style={{ background:'none', border:`1px solid ${t.border}`,
+          color:t.dim, padding:'5px 12px', borderRadius:4, fontSize:13,
+          fontFamily:t.mono, cursor:'pointer', textTransform:'uppercase' }}>← Back</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontFamily:t.head, fontSize:22, fontWeight:800,
+            textTransform:'uppercase', letterSpacing:'0.05em', color:t.text }}>
+            Descriptions
+          </div>
+          <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginTop:2 }}>
+            {items.length} entries
+          </div>
+        </div>
+        <Btn onClick={() => setModal('add')}>+ New</Btn>
+      </div>
+
+      {/* List */}
+      <div style={{ flex:1, overflowY:'auto', padding:20 }}>
+        {loading
+          ? <div style={{ color:t.dim, fontFamily:t.mono, fontSize:13 }}>Loading...</div>
+          : items.length === 0
+          ? <div style={{ textAlign:'center', padding:60, color:t.dim,
+              fontFamily:t.mono, fontSize:13 }}>No descriptions yet.</div>
+          : (
+            <div style={{ display:'flex', flexDirection:'column', gap:8, maxWidth:820 }}>
+              {items.map(item => (
+                <div key={item.id} style={{ background:t.surf,
+                  border:`1px solid ${t.border}`, borderRadius:6, padding:'12px 16px',
+                  display:'flex', alignItems:'flex-start', gap:16 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+                      <span style={{ fontSize:12, fontFamily:t.mono, color:t.accent,
+                        background:t.accentDim, padding:'2px 8px', borderRadius:3 }}>
+                        {item.key}
+                      </span>
+                      <span style={{ fontSize:14, fontFamily:t.head, fontWeight:700,
+                        color:t.text, textTransform:'uppercase', letterSpacing:'0.04em' }}>
+                        {item.title}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono,
+                      lineHeight:1.6, whiteSpace:'pre-wrap',
+                      maxHeight:60, overflow:'hidden', textOverflow:'ellipsis' }}>
+                      {item.body}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                    <Btn small variant="ghost" onClick={() => setModal(item)}>Edit</Btn>
+                    <Btn small variant="danger" onClick={() => setDelConfirm(item)}>Del</Btn>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        }
+      </div>
+
+      {/* Add / Edit modal */}
+      {modal && (
+        <DescriptionModal
+          item={modal === 'add' ? null : modal}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); load() }}
+        />
+      )}
+
+      {/* Delete confirm */}
+      {delConfirm && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:100,
+          display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:t.surf, border:`1px solid ${t.border}`,
+            borderRadius:8, padding:28, maxWidth:360 }}>
+            <div style={{ fontFamily:t.head, fontSize:18, fontWeight:700,
+              textTransform:'uppercase', color:t.text, marginBottom:8 }}>
+              Delete description?
+            </div>
+            <div style={{ fontFamily:t.mono, fontSize:12, color:t.dim, marginBottom:6 }}>
+              Key: <span style={{ color:t.accent }}>{delConfirm.key}</span>
+            </div>
+            <div style={{ fontFamily:t.mono, fontSize:12, color:t.red, marginBottom:20 }}>
+              This cannot be undone.
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <Btn variant="danger" onClick={() => handleDelete(delConfirm.id)}>Delete</Btn>
+              <Btn variant="ghost" onClick={() => setDelConfirm(null)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DescriptionModal({ item, onClose, onSaved }) {
+  const isEdit = !!item
+  const [key,   setKey]   = useState(item?.key   || '')
+  const [title, setTitle] = useState(item?.title || '')
+  const [body,  setBody]  = useState(item?.body  || '')
+  const [err,   setErr]   = useState('')
+  const [saving,setSaving]= useState(false)
+
+  const save = async () => {
+    if (!key.trim())   { setErr('Key is required'); return }
+    if (!title.trim()) { setErr('Title is required'); return }
+    if (!body.trim())  { setErr('Body is required'); return }
+    setSaving(true); setErr('')
+    const payload = { key: key.trim(), title: title.trim(), body: body.trim() }
+    const { error } = isEdit
+      ? await supabase.from('descriptions').update({ title: payload.title, body: payload.body }).eq('id', item.id)
+      : await supabase.from('descriptions').insert(payload)
+    if (error) { setErr(`Save failed: ${error.message}`); setSaving(false); return }
+    onSaved()
+  }
+
+  return (
+    <Modal title={isEdit ? 'Edit Description' : 'New Description'} onClose={onClose} wide>
+      <Row label="Key">
+        {isEdit
+          ? <div style={{ padding:'7px 10px', background:t.surf2,
+              border:`1px solid ${t.border}`, borderRadius:4,
+              fontSize:14, fontFamily:t.mono, color:t.accent }}>
+              {item.key}
+            </div>
+          : <>
+              <Input value={key} onChange={v => setKey(v.toLowerCase().replace(/[^a-z0-9_]/g,''))}
+                placeholder="parts_suspension" />
+              <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono, marginTop:4 }}>
+                Format: parts_[category] or tune_[section] — lowercase + underscore only
+              </div>
+            </>
+        }
+      </Row>
+      <Row label="Title">
+        <Input value={title} onChange={setTitle} placeholder="Springs and Dampers" />
+      </Row>
+      <Row label="Body">
+        <textarea value={body} onChange={e => setBody(e.target.value)}
+          placeholder="Describe this setting or category..."
+          rows={8}
+          style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+            padding:'8px 10px', borderRadius:4, fontSize:13, fontFamily:t.mono,
+            width:'100%', outline:'none', resize:'vertical', lineHeight:1.6 }} />
+      </Row>
+      {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, marginBottom:12 }}>{err}</div>}
+      <div style={{ display:'flex', gap:8 }}>
+        <Btn onClick={save} disabled={saving}>{saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}</Btn>
+        <Btn onClick={onClose} variant="ghost">Cancel</Btn>
+      </div>
+    </Modal>
+  )
+}
+
 // ── GARAGE / CAR LIST ─────────────────────────────────────
 function Garage({ userId, userRole, onSelectCar }) {
   const [cars,    setCars]    = useState([])
@@ -1041,6 +1219,7 @@ function Garage({ userId, userRole, onSelectCar }) {
   const [loading, setLoading] = useState(true)
   const [modal,   setModal]   = useState(null)
   const [showAdmin, setShowAdmin] = useState(false)
+  const [showDesc,  setShowDesc]  = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1069,6 +1248,7 @@ function Garage({ userId, userRole, onSelectCar }) {
         {userRole === 'verifier' && (
           <Btn variant="ghost" small onClick={() => setShowAdmin(true)}>👥 Users</Btn>
         )}
+        <Btn variant="ghost" small onClick={() => setShowDesc(true)}>📋 Descriptions</Btn>
         <Btn onClick={() => setModal('add')}>+ Add Car</Btn>
         <button onClick={() => supabase.auth.signOut()}
           style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
@@ -1106,6 +1286,9 @@ function Garage({ userId, userRole, onSelectCar }) {
       {modal === 'add' && <CarModal userId={userId} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
       {modal && modal !== 'add' && <CarModal car={modal} userId={userId} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
       {showAdmin && <AdminPanel currentUserId={userId} onClose={() => setShowAdmin(false)} />}
+      {showDesc && <div style={{ position:'fixed', inset:0, zIndex:50, background:t.bg }}>
+        <DescriptionsView onBack={() => setShowDesc(false)} />
+      </div>}
     </div>
   )
 }
