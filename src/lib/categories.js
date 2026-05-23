@@ -1,13 +1,13 @@
 // FH6 Class ranges (updated from FH6 in-game data)
 export const CLASSES = ['D','C','B','A','S1','S2','R','X']
 export const CLASS_RANGES = {
-  D:  { min:100, max:500  },
-  C:  { min:501, max:600  },
-  B:  { min:601, max:700  },
-  A:  { min:701, max:800  },
-  S1: { min:801, max:900  },
-  S2: { min:901, max:998  },
-  R:  { min:998, max:998  },
+  D:  { min:100, max:400  },
+  C:  { min:401, max:500  },
+  B:  { min:501, max:600  },
+  A:  { min:601, max:700  },
+  S1: { min:701, max:800  },
+  S2: { min:801, max:900  },
+  R:  { min:901, max:998  },
   X:  { min:999, max:9999 },
 }
 
