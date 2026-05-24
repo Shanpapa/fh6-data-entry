@@ -776,14 +776,87 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   )
 }
 
+// ── CLONE MODAL ───────────────────────────────────────────
+function CloneModal({ currentCar, onClose, onClone, cloning }) {
+  const [search,  setSearch]  = useState('')
+  const [cars,    setCars]    = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (search.length < 2) { setCars([]); return }
+    setLoading(true)
+    const q = search.toLowerCase()
+    supabase.from('cars').select('id,make,model,year,stock_class,stock_pi,stock_drivetrain')
+      .or(`make.ilike.%${q}%,model.ilike.%${q}%`)
+      .neq('id', currentCar.id)
+      .limit(12)
+      .then(({ data }) => { setCars(data || []); setLoading(false) })
+  }, [search, currentCar.id])
+
+  return (
+    <Modal title="Clone Structure From Car" onClose={onClose} wide>
+      <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginBottom:14, lineHeight:1.6 }}>
+        Copies all categories, subcategories, and part names from the selected car to{' '}
+        <span style={{ color:t.accent }}>{currentCar.year} {currentCar.make} {currentCar.model}</span>.
+        Effects will be empty — fill them in afterwards using Actual mode.
+        Parts that already exist on this car are skipped.
+      </div>
+      <Row label="Search source car">
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Type make or model..."
+          style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+            padding:'8px 12px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+            width:'100%', outline:'none' }} />
+      </Row>
+      {loading && <div style={{ color:t.dim, fontSize:12, fontFamily:t.mono }}>Searching...</div>}
+      <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:8, maxHeight:300, overflowY:'auto' }}>
+        {cars.map(c => {
+          const dtColor = { RWD:t.accent, FWD:t.blue, AWD:t.green }[c.stock_drivetrain] || t.dim
+          return (
+            <div key={c.id} style={{ display:'flex', alignItems:'center', gap:12,
+              background:t.surf2, borderRadius:6, padding:'10px 14px' }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, fontFamily:t.head, fontWeight:700,
+                  textTransform:'uppercase', color:t.text }}>
+                  {c.year} {c.make} {c.model}
+                </div>
+                <div style={{ display:'flex', gap:6, marginTop:4 }}>
+                  {c.stock_class && <Tag color={t.yellow}>{c.stock_class} {c.stock_pi}</Tag>}
+                  {c.stock_drivetrain && <Tag color={dtColor}>{c.stock_drivetrain}</Tag>}
+                </div>
+              </div>
+              <Btn small onClick={() => onClone(c)} disabled={cloning}>
+                {cloning ? 'Cloning...' : 'Clone'}
+              </Btn>
+            </div>
+          )
+        })}
+        {!loading && search.length >= 2 && cars.length === 0 && (
+          <div style={{ color:t.dim, fontSize:12, fontFamily:t.mono, padding:8 }}>
+            No cars found.
+          </div>
+        )}
+        {search.length < 2 && (
+          <div style={{ color:t.dim, fontSize:12, fontFamily:t.mono, padding:8 }}>
+            Type at least 2 characters to search.
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 // ── CAR DETAIL VIEW ───────────────────────────────────────
 function CarDetail({ car, userId, userRole, onBack }) {
   const [parts,   setParts]   = useState([])
   const [loading, setLoading] = useState(true)
-  const [modal,   setModal]   = useState(null) // null | 'add' | {part}
+  const [modal,   setModal]   = useState(null)
   const [prefCat, setPrefCat] = useState('')
   const [prefSub, setPrefSub] = useState('')
   const [expanded, setExpanded] = useState({})
+  const [showClone, setShowClone] = useState(false)
+  const [cloning,   setCloning]  = useState(false)
+  const [cloneMsg,  setCloneMsg] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -806,7 +879,50 @@ function CarDetail({ car, userId, userRole, onBack }) {
     load()
   }
 
-  // Group by category → subcategory
+  // Export parts as CSV template (effects cleared)
+  const exportTemplate = () => {
+    if (parts.length === 0) return
+    const rows = parts.map(p => ({
+      car_id: car.id, category: p.category, subcategory: p.subcategory,
+      name: p.name, is_stock: p.is_stock ? 'true' : 'false',
+      pi_change: '', price_cr: '',
+      ...Object.fromEntries(IMPORT_COLUMNS
+        .filter(c => !['car_id','category','subcategory','name','is_stock','pi_change','price_cr'].includes(c))
+        .map(c => [c, '']))
+    }))
+    downloadCSV(`${car.make}_${car.model}_${car.year}_parts_template.csv`, rows)
+  }
+
+  // Clone structure from another car
+  const handleClone = async (sourceCar) => {
+    setCloning(true); setCloneMsg('')
+    const { data: sourceParts } = await supabase.from('car_parts')
+      .select('category,subcategory,name,is_stock').eq('car_id', sourceCar.id)
+    if (!sourceParts?.length) {
+      setCloning(false); setCloneMsg('Source car has no parts.')
+      return
+    }
+    // Skip parts already existing on this car
+    const existingKeys = new Set(parts.map(p => `${p.category}|${p.subcategory}|${p.name}`))
+    const toInsert = sourceParts
+      .filter(p => !existingKeys.has(`${p.category}|${p.subcategory}|${p.name}`))
+      .map(p => ({ car_id: car.id, category: p.category,
+        subcategory: p.subcategory, name: p.name,
+        is_stock: p.is_stock, pi_change: 0,
+        effects: {}, added_by: userId }))
+
+    if (toInsert.length === 0) {
+      setCloning(false); setCloneMsg('All parts already exist on this car.')
+      return
+    }
+    const { error } = await supabase.from('car_parts').insert(toInsert)
+    setCloning(false)
+    if (error) { setCloneMsg(`Error: ${error.message}`); return }
+    setCloneMsg(`✓ Cloned ${toInsert.length} parts from ${sourceCar.make} ${sourceCar.model}. Effects are empty — fill in with actual mode.`)
+    setShowClone(false)
+    load()
+  }
+
   const grouped = {}
   parts.forEach(p => {
     if (!grouped[p.category]) grouped[p.category] = {}
@@ -815,11 +931,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
   })
 
   const toggleCat = (cat) => setExpanded(p => ({ ...p, [cat]: !p[cat] }))
-
-  const openAdd = (cat='', sub='') => {
-    setPrefCat(cat); setPrefSub(sub); setModal('add')
-  }
-
+  const openAdd = (cat='', sub='') => { setPrefCat(cat); setPrefSub(sub); setModal('add') }
   const dtColor = { RWD:t.accent, FWD:t.blue, AWD:t.green }[car.stock_drivetrain] || t.dim
 
   return (
@@ -838,6 +950,10 @@ function CarDetail({ car, userId, userRole, onBack }) {
               {car.year} {car.make} {car.model}
             </div>
           </div>
+          {parts.length > 0 && (
+            <Btn variant="ghost" small onClick={exportTemplate}>↓ Export Template</Btn>
+          )}
+          <Btn variant="ghost" small onClick={() => setShowClone(true)}>⎘ Clone Structure</Btn>
           <Btn onClick={() => openAdd()}>+ Add Part</Btn>
         </div>
 
@@ -984,6 +1100,26 @@ function CarDetail({ car, userId, userRole, onBack }) {
         <PartModal part={modal} carId={car.id} userId={userId} car={car} baseStats={car.base_stats || {}}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load() }} />
+      )}
+      {showClone && (
+        <CloneModal
+          currentCar={car}
+          onClose={() => setShowClone(false)}
+          onClone={handleClone}
+          cloning={cloning}
+        />
+      )}
+      {cloneMsg && (
+        <div style={{ position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)',
+          background:t.surf, border:`1px solid ${cloneMsg.startsWith('✓') ? t.green : t.red}`,
+          borderRadius:6, padding:'10px 20px', fontSize:12, fontFamily:t.mono,
+          color: cloneMsg.startsWith('✓') ? t.green : t.red, zIndex:200,
+          maxWidth:500, textAlign:'center' }}>
+          {cloneMsg}
+          <button onClick={() => setCloneMsg('')}
+            style={{ background:'none', border:'none', color:'inherit',
+              cursor:'pointer', marginLeft:12, fontSize:14 }}>✕</button>
+        </div>
       )}
     </div>
   )
