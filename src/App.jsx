@@ -478,7 +478,7 @@ function CarModal({ car, onClose, onSaved, userId }) {
 }
 
 // ── PART FORM MODAL ───────────────────────────────────────
-function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, userId, baseStats, car }) {
+function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, userId, baseStats, car, userRole }) {
   const isEdit = !!part?.id
   const allCats = Object.keys(CATEGORIES)
   const [cat,  setCat]  = useState(part?.category    || prefillCat || allCats[0])
@@ -570,6 +570,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
       pi_change: finalPiChange,
       price_cr: priceCr !== '' ? parseInt(priceCr) : null,
       effects: finalEffects, added_by: userId,
+      verified: userRole === 'verifier',
     }
     const { error } = isEdit
       ? await supabase.from('car_parts').update(payload).eq('id', part.id)
@@ -938,7 +939,8 @@ function CarDetail({ car, userId, userRole, onBack }) {
       .map(p => ({ car_id: car.id, category: p.category,
         subcategory: p.subcategory, name: p.name,
         is_stock: p.is_stock, pi_change: 0,
-        effects: {}, added_by: userId }))
+        effects: {}, added_by: userId,
+        verified: userRole === 'verifier' }))
 
     if (toInsert.length === 0) {
       setCloning(false); setCloneMsg('All parts already exist on this car.')
@@ -1148,13 +1150,13 @@ function CarDetail({ car, userId, userRole, onBack }) {
 
       {/* Modals */}
       {modal === 'add' && (
-        <PartModal carId={car.id} userId={userId} car={car} baseStats={car.base_stats || {}}
+        <PartModal carId={car.id} userId={userId} car={car} userRole={userRole} baseStats={car.base_stats || {}}
           prefillCat={prefCat} prefillSub={prefSub}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); setExpanded(p => ({ ...p, [prefCat]: true })) }} />
       )}
       {modal && modal !== 'add' && (
-        <PartModal part={modal} carId={car.id} userId={userId} car={car} baseStats={car.base_stats || {}}
+        <PartModal part={modal} carId={car.id} userId={userId} car={car} userRole={userRole} baseStats={car.base_stats || {}}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load() }} />
       )}
