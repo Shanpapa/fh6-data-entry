@@ -495,7 +495,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   const [effects,  setEffects]  = useState(part?.effects  || {})
   const [err,      setErr]      = useState('')
   const [saving,   setSaving]   = useState(false)
-  const [inputMode, setInputMode] = useState('delta') // 'delta' | 'actual'
+  const [inputMode, setInputMode] = useState(getActualModePref())
   const [actualVals, setActualVals] = useState({})
 
   const [nameOptions, setNameOptions] = useState([])
@@ -679,7 +679,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         <div style={{ display:'flex', background:t.surf2, borderRadius:6,
           padding:3, gap:3, flexShrink:0 }}>
           {[['delta','Δ Delta'],['actual','= Actual']].map(([mode, label]) => (
-            <button key={mode} onClick={() => setInputMode(mode)}
+            <button key={mode} onClick={() => { setInputMode(mode); setActualModePref(mode) }}
               style={{ background: inputMode===mode ? t.surf3 : 'transparent',
                 border: inputMode===mode ? `1px solid ${t.accent}` : '1px solid transparent',
                 color: inputMode===mode ? t.accent : t.dim,
@@ -857,6 +857,8 @@ function CarDetail({ car, userId, userRole, onBack }) {
   const [showClone, setShowClone] = useState(false)
   const [cloning,   setCloning]  = useState(false)
   const [cloneMsg,  setCloneMsg] = useState('')
+  const [showEmptyOnly, setShowEmptyOnly] = useState(false)
+  const [bulkVerifying, setBulkVerifying] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -923,17 +925,23 @@ function CarDetail({ car, userId, userRole, onBack }) {
     load()
   }
 
-  const grouped = {}
-  parts.forEach(p => {
-    if (!grouped[p.category]) grouped[p.category] = {}
-    if (!grouped[p.category][p.subcategory]) grouped[p.category][p.subcategory] = []
-    grouped[p.category][p.subcategory].push(p)
-  })
-
   const toggleCat = (cat) => setExpanded(p => ({ ...p, [cat]: !p[cat] }))
   const openAdd = (cat='', sub='') => { setPrefCat(cat); setPrefSub(sub); setModal('add') }
   const dtColor = { RWD:t.accent, FWD:t.blue, AWD:t.green }[car.stock_drivetrain] || t.dim
 
+  const emptyParts = parts.filter(p => !p.effects || Object.keys(p.effects).length === 0)
+
+  const bulkVerify = async () => {
+    if (!unverifiedParts.length) return
+    setBulkVerifying(true)
+    const ids = unverifiedParts.map(p => p.id)
+    await supabase.from('car_parts').update({ verified: true }).in('id', ids)
+    setBulkVerifying(false)
+    load()
+  }
+
+  // Filter grouped by showEmptyOnly
+  const displayParts = showEmptyOnly ? emptyParts : parts
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
       {/* Header */}
@@ -954,6 +962,21 @@ function CarDetail({ car, userId, userRole, onBack }) {
             <Btn variant="ghost" small onClick={exportTemplate}>↓ Export Template</Btn>
           )}
           <Btn variant="ghost" small onClick={() => setShowClone(true)}>⎘ Clone Structure</Btn>
+          {emptyParts.length > 0 && (
+            <button onClick={() => setShowEmptyOnly(p => !p)}
+              style={{ background: showEmptyOnly ? `${t.yellow}22` : 'none',
+                border:`1px solid ${showEmptyOnly ? t.yellow : t.border}`,
+                color: showEmptyOnly ? t.yellow : t.dim,
+                padding:'5px 12px', borderRadius:4, fontSize:12,
+                fontFamily:t.mono, cursor:'pointer', textTransform:'uppercase' }}>
+              {showEmptyOnly ? '⚠ Empty only' : `⚠ ${emptyParts.length} empty`}
+            </button>
+          )}
+          {unverifiedParts.length > 0 && (
+            <Btn small variant="ghost" onClick={bulkVerify} disabled={bulkVerifying}>
+              {bulkVerifying ? 'Verifying...' : `Verify all (${unverifiedParts.length})`}
+            </Btn>
+          )}
           <Btn onClick={() => openAdd()}>+ Add Part</Btn>
         </div>
 
@@ -1674,30 +1697,55 @@ function DescriptionModal({ item, onClose, onSaved }) {
 }
 
 // ── GARAGE / CAR LIST ─────────────────────────────────────
+// Actual mode preference persisted in sessionStorage
+const getActualModePref = () => sessionStorage.getItem('fh6_input_mode') || 'delta'
+const setActualModePref = (m) => sessionStorage.setItem('fh6_input_mode', m)
+
 function Garage({ userId, userRole, onSelectCar }) {
-  const [cars,    setCars]    = useState([])
-  const [search,  setSearch]  = useState('')
-  const [loading, setLoading] = useState(true)
-  const [modal,   setModal]   = useState(null)
-  const [showAdmin, setShowAdmin] = useState(false)
-  const [showDesc,  setShowDesc]  = useState(false)
-  const [showImport,setShowImport]= useState(false)
+  const [cars,       setCars]      = useState([])
+  const [partCounts, setPartCounts]= useState({}) // car_id → {total, withEffects}
+  const [search,     setSearch]    = useState('')
+  const [filterClass,setFilterClass]= useState('')
+  const [filterDt,   setFilterDt]  = useState('')
+  const [loading,    setLoading]   = useState(true)
+  const [modal,      setModal]     = useState(null)
+  const [showAdmin,  setShowAdmin] = useState(false)
+  const [showDesc,   setShowDesc]  = useState(false)
+  const [showImport, setShowImport]= useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     const { data } = await supabase.from('cars').select('*').order('make').order('model')
     setCars(data || [])
+    // Load part counts per car
+    const { data: counts } = await supabase.from('car_parts')
+      .select('car_id, effects')
+    if (counts) {
+      const map = {}
+      counts.forEach(p => {
+        if (!map[p.car_id]) map[p.car_id] = { total: 0, withEffects: 0 }
+        map[p.car_id].total++
+        if (p.effects && Object.keys(p.effects).length > 0) map[p.car_id].withEffects++
+      })
+      setPartCounts(map)
+    }
     setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
 
-  const filtered = cars.filter(c =>
-    `${c.make} ${c.model} ${c.year}`.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = cars.filter(c => {
+    const matchSearch = `${c.make} ${c.model} ${c.year}`.toLowerCase().includes(search.toLowerCase())
+    const matchClass  = !filterClass || c.stock_class === filterClass
+    const matchDt     = !filterDt   || c.stock_drivetrain === filterDt
+    return matchSearch && matchClass && matchDt
+  })
+
+  const availableClasses = [...new Set(cars.map(c => c.stock_class).filter(Boolean))].sort()
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
+      {/* Header */}
       <div style={{ background:t.surf, borderBottom:`1px solid ${t.border}`,
         padding:'12px 20px', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -1720,28 +1768,66 @@ function Garage({ userId, userRole, onSelectCar }) {
         </button>
       </div>
 
-      <div style={{ padding:'14px 20px 0', flexShrink:0 }}>
+      {/* Search + Filters */}
+      <div style={{ padding:'12px 20px', flexShrink:0, display:'flex', gap:10 }}>
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search cars... (make, model, year)"
           style={{ background:t.surf, border:`1px solid ${t.border}`, color:t.text,
-            padding:'9px 14px', borderRadius:6, fontSize:14, fontFamily:t.mono,
-            width:'100%', outline:'none' }} />
+            padding:'8px 14px', borderRadius:6, fontSize:14, fontFamily:t.mono,
+            flex:1, outline:'none' }} />
+        <select value={filterClass} onChange={e => setFilterClass(e.target.value)}
+          style={{ background:t.surf, border:`1px solid ${t.border}`, color: filterClass ? t.yellow : t.dim,
+            padding:'8px 12px', borderRadius:6, fontSize:13, fontFamily:t.mono,
+            cursor:'pointer', outline:'none', minWidth:80 }}>
+          <option value="">All Classes</option>
+          {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filterDt} onChange={e => setFilterDt(e.target.value)}
+          style={{ background:t.surf, border:`1px solid ${t.border}`, color: filterDt ? t.accent : t.dim,
+            padding:'8px 12px', borderRadius:6, fontSize:13, fontFamily:t.mono,
+            cursor:'pointer', outline:'none', minWidth:90 }}>
+          <option value="">All DT</option>
+          <option value="RWD">RWD</option>
+          <option value="FWD">FWD</option>
+          <option value="AWD">AWD</option>
+        </select>
+        {(filterClass || filterDt) && (
+          <button onClick={() => { setFilterClass(''); setFilterDt('') }}
+            style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
+              padding:'8px 12px', borderRadius:6, fontSize:12, fontFamily:t.mono, cursor:'pointer' }}>
+            ✕ Clear
+          </button>
+        )}
       </div>
 
-      <div style={{ flex:1, overflowY:'auto', padding:20 }}>
-        {loading && <div style={{ color:t.dim, fontSize:14, fontFamily:t.mono }}>Loading...</div>}
+      {/* Stats bar */}
+      {!loading && (
+        <div style={{ padding:'0 20px 10px', flexShrink:0,
+          fontSize:11, color:t.dim, fontFamily:t.mono }}>
+          {filtered.length} cars
+          {(filterClass || filterDt || search) && ` (filtered from ${cars.length})`}
+          {' · '}
+          {Object.keys(partCounts).length} cars with parts
+        </div>
+      )}
+
+      <div style={{ flex:1, overflowY:'auto', padding:'0 20px 20px' }}>
+        {loading && <div style={{ color:t.dim, fontSize:14, fontFamily:t.mono, padding:20 }}>Loading...</div>}
         {!loading && filtered.length === 0 && (
           <div style={{ textAlign:'center', padding:60 }}>
             <div style={{ fontSize:36, marginBottom:12 }}>🚗</div>
             <div style={{ color:t.dim, fontFamily:t.mono, fontSize:14, marginBottom:16 }}>
-              {search ? 'No cars match your search.' : 'No cars in catalog yet.'}
+              {search || filterClass || filterDt ? 'No cars match your filters.' : 'No cars in catalog yet.'}
             </div>
             <Btn onClick={() => setModal('add')}>+ Add First Car</Btn>
           </div>
         )}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px,1fr))', gap:10 }}>
           {filtered.map(car => (
-            <CarCard key={car.id} car={car} onClick={() => onSelectCar(car)} onEdit={() => setModal(car)} />
+            <CarCard key={car.id} car={car}
+              counts={partCounts[car.id] || null}
+              onClick={() => onSelectCar(car)}
+              onEdit={() => setModal(car)} />
           ))}
         </div>
       </div>
@@ -1759,32 +1845,65 @@ function Garage({ userId, userRole, onSelectCar }) {
   )
 }
 
-function CarCard({ car, onClick, onEdit }) {
+function CarCard({ car, onClick, onEdit, counts }) {
   const [hover, setHover] = useState(false)
   const dtColor = { RWD:t.accent, FWD:t.blue, AWD:t.green }[car.stock_drivetrain] || t.dim
+  const hasBaseStats = car.base_stats && Object.keys(car.base_stats).length > 0
+  const hasparts = counts && counts.total > 0
+  const pct = hasparts ? Math.round((counts.withEffects / counts.total) * 100) : 0
+
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={onClick}
       style={{ background:t.surf, border:`1px solid ${hover?t.accent:t.border}`,
         borderRadius:6, padding:14, cursor:'pointer', transition:'border-color 0.15s' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-        <div>
+        <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:14, color:t.dim, fontFamily:t.mono }}>{car.year}</div>
           <div style={{ fontFamily:t.head, fontSize:20, fontWeight:700,
-            textTransform:'uppercase', letterSpacing:'0.04em', color:t.text, marginTop:2 }}>
+            textTransform:'uppercase', letterSpacing:'0.04em', color:t.text, marginTop:2,
+            whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
             {car.make} {car.model}
           </div>
         </div>
         <button onClick={e => { e.stopPropagation(); onEdit() }}
           style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
-            padding:'3px 10px', borderRadius:3, fontSize:14, fontFamily:t.mono, cursor:'pointer' }}>
+            padding:'3px 10px', borderRadius:3, fontSize:14, fontFamily:t.mono,
+            cursor:'pointer', flexShrink:0, marginLeft:8 }}>
           Edit
         </button>
       </div>
       <div style={{ display:'flex', gap:5, marginTop:10, flexWrap:'wrap' }}>
-        {car.stock_class && <Tag color={t.yellow}>{car.stock_class} {car.stock_pi}</Tag>}
+        {car.stock_class && <Tag color={t.yellow}>{car.stock_class} {car.stock_pi||''}</Tag>}
         {car.stock_drivetrain && <Tag color={dtColor}>{car.stock_drivetrain}</Tag>}
+        {car.car_type && <Tag color={t.dim}>{car.car_type}</Tag>}
       </div>
+      {/* Completion indicator */}
+      <div style={{ marginTop:10, display:'flex', gap:8, alignItems:'center' }}>
+        <div style={{ fontSize:11, color: hasBaseStats ? t.green : t.dim, fontFamily:t.mono }}>
+          {hasBaseStats ? '✓ Stats' : '○ No stats'}
+        </div>
+        {hasparts && (
+          <>
+            <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono }}>·</div>
+            <div style={{ fontSize:11, fontFamily:t.mono,
+              color: pct === 100 ? t.green : pct > 0 ? t.yellow : t.dim }}>
+              {counts.withEffects}/{counts.total} parts
+              {pct === 100 ? ' ✓' : pct > 0 ? ` (${pct}%)` : ' — empty'}
+            </div>
+          </>
+        )}
+        {!hasparts && (
+          <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono }}>· No parts yet</div>
+        )}
+      </div>
+      {hasparts && pct < 100 && (
+        <div style={{ marginTop:6, height:3, background:t.surf2, borderRadius:2, overflow:'hidden' }}>
+          <div style={{ height:'100%', width:`${pct}%`,
+            background: pct > 50 ? t.yellow : t.red,
+            borderRadius:2, transition:'width 0.3s' }} />
+        </div>
+      )}
     </div>
   )
 }
