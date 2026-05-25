@@ -957,6 +957,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
   const dtColor = { RWD:t.accent, FWD:t.blue, AWD:t.green }[car.stock_drivetrain] || t.dim
 
   const emptyParts = parts.filter(p => !p.effects || Object.keys(p.effects).length === 0)
+  const unverifiedParts = parts.filter(p => !p.verified)
 
   const bulkVerify = async () => {
     if (!unverifiedParts.length) return
