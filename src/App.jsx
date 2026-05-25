@@ -299,6 +299,9 @@ function CarModal({ car, onClose, onSaved, userId }) {
     car_type: car?.car_type || '', country: car?.country || '',
     collection: car?.collection || '', dlc_pack: car?.dlc_pack || '',
     is_dlc: car?.is_dlc || false,
+    front_weight_pct: car?.front_weight_pct || '',
+    suspension_type: car?.suspension_type || '',
+    tyre_compound_stock: car?.tyre_compound_stock || '',
   })
   const [baseStats, setBaseStats] = useState(car?.base_stats || {})
   const [err,    setErr]    = useState('')
@@ -350,6 +353,9 @@ function CarModal({ car, onClose, onSaved, userId }) {
       collection: form.collection || null,
       dlc_pack: form.dlc_pack || null,
       is_dlc: form.is_dlc || false,
+      front_weight_pct: form.front_weight_pct !== '' ? parseFloat(form.front_weight_pct) : null,
+      suspension_type: form.suspension_type || null,
+      tyre_compound_stock: form.tyre_compound_stock || null,
       base_stats: Object.keys(baseStats).length > 0 ? baseStats : null,
     }
     const { error } = isEdit
@@ -366,11 +372,21 @@ function CarModal({ car, onClose, onSaved, userId }) {
 
   // Group CAR_STAT_FIELDS by section for display
   const statGroups = [
-    { label:'Main Stats',keys:['stat_speed','stat_handling','stat_acceleration','stat_launch','stat_braking','stat_offroad'] },
-    { label:'Engine',   keys:['power_hp','torque_nm','weight_kg','pwr_hp_kg','displacement_cc','top_speed_kmh'] },
-    { label:'Timing',   keys:['accel_0_97','accel_0_161','brake_dist_97','brake_dist_161'] },
-    { label:'Dynamics', keys:['lateral_g_97','lateral_g_193','mech_balance','aero_balance','aero_efficiency'] },
+    { label:'Performance Index',    keys:['stat_speed','stat_handling','stat_acceleration','stat_launch','stat_braking','stat_offroad'] },
+    { label:'Car Stat',             keys:['power_hp','torque_nm','weight_kg','front_weight_pct','displacement_l','top_speed_kmh','accel_0_100','pwr_hp_kg'] },
+    { label:'Performance',          keys:['aero_efficiency','aero_balance','mech_balance','suspension_type','tyre_compound_stock'] },
+    { label:'Braking Distance',     keys:['brake_dist_97','brake_dist_161'] },
+    { label:'Lateral Gs',           keys:['lateral_g_97','lateral_g_193'] },
+    { label:'Acceleration & Speed', keys:['accel_0_97','accel_0_161'] },
   ]
+
+  // col fields are stored as direct car columns, not in base_stats
+  const colFields = new Set(CAR_STAT_FIELDS.filter(f => f.col).map(f => f.key))
+  const getStatVal = (key) => colFields.has(key) ? (form[key] ?? '') : (baseStats[key] ?? '')
+  const setStatVal = (key, val) => {
+    if (colFields.has(key)) upd(key, val === '' ? null : val)
+    else updS(key, val === '' ? '' : (isNaN(Number(val)) ? val : parseFloat(val)))
+  }
 
   return (
     <Modal title={isEdit ? 'Edit Car' : 'Add Car'} onClose={onClose} wide>
@@ -446,7 +462,7 @@ function CarModal({ car, onClose, onSaved, userId }) {
       <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono, textTransform:'uppercase',
         letterSpacing:'0.12em', marginBottom:4 }}>Base Stats (stock)</div>
       <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginBottom:12 }}>
-        From in-game Performance screen — leave empty if unknown, fill in later
+        From in-game screens — leave empty if unknown, fill in later. Order matches game UI.
       </div>
       {statGroups.map(group => (
         <div key={group.label} style={{ marginBottom:12 }}>
@@ -456,12 +472,16 @@ function CarModal({ car, onClose, onSaved, userId }) {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0 16px' }}>
             {CAR_STAT_FIELDS.filter(f => group.keys.includes(f.key)).map(f => (
               <Row key={f.key} label={f.label}>
-                <input type="number" value={baseStats[f.key] ?? ''} step={f.step}
-                  placeholder="—"
-                  onChange={e => updS(f.key, e.target.value === '' ? '' : parseFloat(e.target.value))}
-                  style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
-                    padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
-                    width:'100%', outline:'none' }} />
+                {f.type === 'select'
+                  ? <Select value={getStatVal(f.key)} onChange={v => setStatVal(f.key, v)}
+                      placeholder="— select —" options={f.options} />
+                  : <input type="number" value={getStatVal(f.key)} step={f.step}
+                      placeholder="—"
+                      onChange={e => setStatVal(f.key, e.target.value)}
+                      style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                        padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+                        width:'100%', outline:'none' }} />
+                }
               </Row>
             ))}
           </div>
