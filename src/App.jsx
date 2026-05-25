@@ -970,6 +970,12 @@ function CarDetail({ car, userId, userRole, onBack }) {
 
   // Filter grouped by showEmptyOnly
   const displayParts = showEmptyOnly ? emptyParts : parts
+  const grouped = {}
+  displayParts.forEach(p => {
+    if (!grouped[p.category]) grouped[p.category] = {}
+    if (!grouped[p.category][p.subcategory]) grouped[p.category][p.subcategory] = []
+    grouped[p.category][p.subcategory].push(p)
+  })
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
       {/* Header */}
