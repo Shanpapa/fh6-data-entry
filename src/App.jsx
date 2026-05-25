@@ -778,20 +778,41 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
 
 // ── CLONE MODAL ───────────────────────────────────────────
 function CloneModal({ currentCar, onClose, onClone, cloning }) {
-  const [search,  setSearch]  = useState('')
-  const [cars,    setCars]    = useState([])
-  const [loading, setLoading] = useState(false)
+  const [search,     setSearch]     = useState('')
+  const [cars,       setCars]       = useState([])
+  const [partCounts, setPartCounts] = useState({})
+  const [loading,    setLoading]    = useState(false)
+  const [copied,     setCopied]     = useState('')
 
   useEffect(() => {
-    if (search.length < 2) { setCars([]); return }
+    if (search.length < 2) { setCars([]); setPartCounts({}); return }
     setLoading(true)
     const q = search.toLowerCase()
     supabase.from('cars').select('id,make,model,year,stock_class,stock_pi,stock_drivetrain')
       .or(`make.ilike.%${q}%,model.ilike.%${q}%`)
       .neq('id', currentCar.id)
       .limit(12)
-      .then(({ data }) => { setCars(data || []); setLoading(false) })
+      .then(async ({ data }) => {
+        setCars(data || [])
+        if (data?.length) {
+          const ids = data.map(c => c.id)
+          const { data: counts } = await supabase.from('car_parts')
+            .select('car_id').in('car_id', ids)
+          if (counts) {
+            const map = {}
+            counts.forEach(p => { map[p.car_id] = (map[p.car_id] || 0) + 1 })
+            setPartCounts(map)
+          }
+        }
+        setLoading(false)
+      })
   }, [search, currentCar.id])
+
+  const copyId = (id) => {
+    navigator.clipboard.writeText(id)
+    setCopied(id)
+    setTimeout(() => setCopied(''), 2000)
+  }
 
   return (
     <Modal title="Clone Structure From Car" onClose={onClose} wide>
@@ -812,6 +833,7 @@ function CloneModal({ currentCar, onClose, onClone, cloning }) {
       <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:8, maxHeight:300, overflowY:'auto' }}>
         {cars.map(c => {
           const dtColor = { RWD:t.accent, FWD:t.blue, AWD:t.green }[c.stock_drivetrain] || t.dim
+          const count = partCounts[c.id] || 0
           return (
             <div key={c.id} style={{ display:'flex', alignItems:'center', gap:12,
               background:t.surf2, borderRadius:6, padding:'10px 14px' }}>
@@ -820,21 +842,26 @@ function CloneModal({ currentCar, onClose, onClone, cloning }) {
                   textTransform:'uppercase', color:t.text }}>
                   {c.year} {c.make} {c.model}
                 </div>
-                <div style={{ display:'flex', gap:6, marginTop:4 }}>
+                <div style={{ display:'flex', gap:6, marginTop:4, flexWrap:'wrap' }}>
                   {c.stock_class && <Tag color={t.yellow}>{c.stock_class} {c.stock_pi}</Tag>}
                   {c.stock_drivetrain && <Tag color={dtColor}>{c.stock_drivetrain}</Tag>}
+                  <Tag color={count > 0 ? t.green : t.dim}>
+                    {count > 0 ? `${count} parts` : 'no parts'}
+                  </Tag>
                 </div>
               </div>
-              <Btn small onClick={() => onClone(c)} disabled={cloning}>
-                {cloning ? 'Cloning...' : 'Clone'}
+              <Btn small variant="ghost" onClick={() => copyId(c.id)}
+                disabled={copied === c.id}>
+                {copied === c.id ? '✓ Copied ID' : 'Copy ID'}
+              </Btn>
+              <Btn small onClick={() => onClone(c)} disabled={cloning || count === 0}>
+                {cloning ? '...' : count === 0 ? 'No parts' : 'Clone'}
               </Btn>
             </div>
           )
         })}
         {!loading && search.length >= 2 && cars.length === 0 && (
-          <div style={{ color:t.dim, fontSize:12, fontFamily:t.mono, padding:8 }}>
-            No cars found.
-          </div>
+          <div style={{ color:t.dim, fontSize:12, fontFamily:t.mono, padding:8 }}>No cars found.</div>
         )}
         {search.length < 2 && (
           <div style={{ color:t.dim, fontSize:12, fontFamily:t.mono, padding:8 }}>
@@ -1703,10 +1730,11 @@ const setActualModePref = (m) => sessionStorage.setItem('fh6_input_mode', m)
 
 function Garage({ userId, userRole, onSelectCar }) {
   const [cars,       setCars]      = useState([])
-  const [partCounts, setPartCounts]= useState({}) // car_id → {total, withEffects}
+  const [partCounts, setPartCounts]= useState({})
   const [search,     setSearch]    = useState('')
   const [filterClass,setFilterClass]= useState('')
   const [filterDt,   setFilterDt]  = useState('')
+  const [sortBy,     setSortBy]    = useState('make')
   const [loading,    setLoading]   = useState(true)
   const [modal,      setModal]     = useState(null)
   const [showAdmin,  setShowAdmin] = useState(false)
@@ -1739,6 +1767,17 @@ function Garage({ userId, userRole, onSelectCar }) {
     const matchClass  = !filterClass || c.stock_class === filterClass
     const matchDt     = !filterDt   || c.stock_drivetrain === filterDt
     return matchSearch && matchClass && matchDt
+  }).sort((a, b) => {
+    if (sortBy === 'parts_asc') {
+      return (partCounts[a.id]?.total || 0) - (partCounts[b.id]?.total || 0)
+    }
+    if (sortBy === 'incomplete') {
+      const pctA = partCounts[a.id] ? partCounts[a.id].withEffects / partCounts[a.id].total : 0
+      const pctB = partCounts[b.id] ? partCounts[b.id].withEffects / partCounts[b.id].total : 0
+      return pctA - pctB
+    }
+    // default: make/model
+    return `${a.make} ${a.model}`.localeCompare(`${b.make} ${b.model}`)
   })
 
   const availableClasses = [...new Set(cars.map(c => c.stock_class).filter(Boolean))].sort()
@@ -1769,12 +1808,12 @@ function Garage({ userId, userRole, onSelectCar }) {
       </div>
 
       {/* Search + Filters */}
-      <div style={{ padding:'12px 20px', flexShrink:0, display:'flex', gap:10 }}>
+      <div style={{ padding:'12px 20px', flexShrink:0, display:'flex', gap:10, flexWrap:'wrap' }}>
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search cars... (make, model, year)"
           style={{ background:t.surf, border:`1px solid ${t.border}`, color:t.text,
             padding:'8px 14px', borderRadius:6, fontSize:14, fontFamily:t.mono,
-            flex:1, outline:'none' }} />
+            flex:1, minWidth:180, outline:'none' }} />
         <select value={filterClass} onChange={e => setFilterClass(e.target.value)}
           style={{ background:t.surf, border:`1px solid ${t.border}`, color: filterClass ? t.yellow : t.dim,
             padding:'8px 12px', borderRadius:6, fontSize:13, fontFamily:t.mono,
@@ -1790,6 +1829,14 @@ function Garage({ userId, userRole, onSelectCar }) {
           <option value="RWD">RWD</option>
           <option value="FWD">FWD</option>
           <option value="AWD">AWD</option>
+        </select>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+          style={{ background:t.surf, border:`1px solid ${t.border}`, color:t.dim,
+            padding:'8px 12px', borderRadius:6, fontSize:13, fontFamily:t.mono,
+            cursor:'pointer', outline:'none', minWidth:120 }}>
+          <option value="make">A→Z</option>
+          <option value="parts_asc">Fewest parts first</option>
+          <option value="incomplete">Least complete first</option>
         </select>
         {(filterClass || filterDt) && (
           <button onClick={() => { setFilterClass(''); setFilterDt('') }}
@@ -1846,11 +1893,19 @@ function Garage({ userId, userRole, onSelectCar }) {
 }
 
 function CarCard({ car, onClick, onEdit, counts }) {
-  const [hover, setHover] = useState(false)
+  const [hover,  setHover]  = useState(false)
+  const [copied, setCopied] = useState(false)
   const dtColor = { RWD:t.accent, FWD:t.blue, AWD:t.green }[car.stock_drivetrain] || t.dim
   const hasBaseStats = car.base_stats && Object.keys(car.base_stats).length > 0
   const hasparts = counts && counts.total > 0
   const pct = hasparts ? Math.round((counts.withEffects / counts.total) * 100) : 0
+
+  const copyId = (e) => {
+    e.stopPropagation()
+    navigator.clipboard.writeText(car.id)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -1866,19 +1921,27 @@ function CarCard({ car, onClick, onEdit, counts }) {
             {car.make} {car.model}
           </div>
         </div>
-        <button onClick={e => { e.stopPropagation(); onEdit() }}
-          style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
-            padding:'3px 10px', borderRadius:3, fontSize:14, fontFamily:t.mono,
-            cursor:'pointer', flexShrink:0, marginLeft:8 }}>
-          Edit
-        </button>
+        <div style={{ display:'flex', gap:4, flexShrink:0, marginLeft:8 }}>
+          <button onClick={copyId}
+            style={{ background:'none',
+              border:`1px solid ${copied ? t.green : t.border}`,
+              color: copied ? t.green : t.dim,
+              padding:'3px 8px', borderRadius:3, fontSize:11, fontFamily:t.mono,
+              cursor:'pointer', whiteSpace:'nowrap' }}>
+            {copied ? '✓ ID' : 'ID'}
+          </button>
+          <button onClick={e => { e.stopPropagation(); onEdit() }}
+            style={{ background:'none', border:`1px solid ${t.border}`, color:t.dim,
+              padding:'3px 10px', borderRadius:3, fontSize:14, fontFamily:t.mono, cursor:'pointer' }}>
+            Edit
+          </button>
+        </div>
       </div>
       <div style={{ display:'flex', gap:5, marginTop:10, flexWrap:'wrap' }}>
         {car.stock_class && <Tag color={t.yellow}>{car.stock_class} {car.stock_pi||''}</Tag>}
         {car.stock_drivetrain && <Tag color={dtColor}>{car.stock_drivetrain}</Tag>}
         {car.car_type && <Tag color={t.dim}>{car.car_type}</Tag>}
       </div>
-      {/* Completion indicator */}
       <div style={{ marginTop:10, display:'flex', gap:8, alignItems:'center' }}>
         <div style={{ fontSize:11, color: hasBaseStats ? t.green : t.dim, fontFamily:t.mono }}>
           {hasBaseStats ? '✓ Stats' : '○ No stats'}
