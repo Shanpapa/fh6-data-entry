@@ -1117,6 +1117,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
             Edit the car to add it.
           </div>
         )}
+        {car.base_stats && Object.keys(car.base_stats).length > 0 && (
           <div style={{ background:t.surf2, borderRadius:6, padding:'10px 14px',
             display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))', gap:'6px 12px' }}>
             {Object.entries(car.base_stats).map(([k, v]) => {
