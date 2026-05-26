@@ -50,10 +50,10 @@ export const EFFECT_FIELDS = [
   { key:'displacement_l',    label:'Displacement (L)', type:'number', step:0.01,  group:'Car Stat' },
   { key:'top_speed_kmh',     label:'Top Speed (km/h)', type:'number', step:0.1,   group:'Car Stat' },
   { key:'accel_0_100',       label:'0-100 kph (s)',    type:'number', step:0.001, group:'Car Stat' },
-  // Aero
-  { key:'aero_efficiency',   label:'Aero Efficiency',  type:'number', step:0.001, group:'Aero' },
-  { key:'aero_balance',      label:'Aero Balance',     type:'number', step:0.01,  group:'Aero' },
-  { key:'mech_balance',      label:'Mech. Balance',    type:'number', step:0.01,  group:'Aero' },
+  // Aero — FH6 confirmed targets
+  { key:'aero_efficiency',   label:'Aero Efficiency',  type:'number', step:0.001, group:'Aero', hint:'higher = less drag' },
+  { key:'aero_balance',      label:'Aero Balance',     type:'number', step:0.01,  group:'Aero', hint:'FH6 target: ~0.50' },
+  { key:'mech_balance',      label:'Mech. Balance',    type:'number', step:0.01,  group:'Aero', hint:'FH6 target: 0.55–0.65' },
   // Braking Distance (Tune tab)
   { key:'brake_dist_97',     label:'Braking 97 km/h (m)',  type:'number', step:0.1,   group:'Braking Distance' },
   { key:'brake_dist_161',    label:'Braking 161 km/h (m)', type:'number', step:0.1,   group:'Braking Distance' },
@@ -66,6 +66,7 @@ export const EFFECT_FIELDS = [
   // Flags
   { key:'unlocks_tuning',    label:'Unlocks tuning sliders', type:'bool',   group:'Flags' },
   { key:'unlock_type',       label:'Unlock type',      type:'select', group:'Flags',
+    // springs_dampers = Springs + Dampers + Alignment | arb = ARBs | differential = Diff | transmission = Gearing | aero = Aero
     options:['','springs_dampers','arb','differential','transmission','aero'] },
   { key:'compound_type',     label:'Compound type',    type:'select', group:'Flags',
     options:['','Stock','Street','Sport','Semi-Slick','Race Slick','Rally','Drift','Off-Road'] },
