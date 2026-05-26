@@ -47,6 +47,7 @@ export const EFFECT_FIELDS = [
   { key:'power_hp',          label:'Power (HP)',        type:'number', step:1,     group:'Car Stat' },
   { key:'torque_nm',         label:'Torque (Nm)',       type:'number', step:1,     group:'Car Stat' },
   { key:'weight_kg',         label:'Weight (kg)',       type:'number', step:1,     group:'Car Stat', hint:'negative = lighter' },
+  { key:'front_weight_pct',  label:'Front (%)',         type:'number', step:0.1,   group:'Car Stat', hint:'e.g. 54' },
   { key:'pwr_hp_kg',         label:'PWR (hp/kg)',       type:'number', step:0.01,  group:'Car Stat' },
   { key:'displacement_l',    label:'Displacement (L)',  type:'number', step:0.001, group:'Car Stat' },
   // ── Braking Distance ──────────────────────────────────────────────────
@@ -58,7 +59,6 @@ export const EFFECT_FIELDS = [
   // ── Acceleration & Speed ──────────────────────────────────────────────
   { key:'accel_0_97',        label:'0–97 km/h (s)',     type:'number', step:0.001, group:'Acceleration & Speed' },
   { key:'accel_0_161',       label:'0–161 km/h (s)',    type:'number', step:0.001, group:'Acceleration & Speed' },
-  { key:'accel_0_100',       label:'0–100 kph (s)',     type:'number', step:0.001, group:'Acceleration & Speed' },
   { key:'top_speed_kmh',     label:'Top Speed (km/h)',  type:'number', step:0.1,   group:'Acceleration & Speed' },
   // ── Aerodynamics ──────────────────────────────────────────────────────
   { key:'aero_efficiency',   label:'Efficiency',        type:'number', step:0.001, group:'Aerodynamics', hint:'higher = less drag' },
