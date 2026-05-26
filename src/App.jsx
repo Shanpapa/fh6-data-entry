@@ -65,22 +65,29 @@ const Tag = ({ children, color }) => (
   </span>
 )
 
-const Modal = ({ title, onClose, children, wide }) => (
-  <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:100,
-    display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-    <div style={{ background:t.surf, border:`1px solid ${t.borderHi}`, borderRadius:8,
-      width:'100%', maxWidth: wide ? 640 : 480, maxHeight:'90vh', overflow:'auto' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
-        padding:'14px 20px', borderBottom:`1px solid ${t.border}` }}>
-        <span style={{ fontFamily:t.head, fontSize:19, fontWeight:700,
-          textTransform:'uppercase', letterSpacing:'0.06em', color:t.text }}>{title}</span>
-        <button onClick={onClose} style={{ background:'none', border:'none',
-          color:t.dim, fontSize:18, cursor:'pointer', lineHeight:1 }}>✕</button>
+const Modal = ({ title, onClose, children, wide }) => {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:100,
+      display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:t.surf, border:`1px solid ${t.borderHi}`, borderRadius:8,
+        width:'100%', maxWidth: wide ? 640 : 480, maxHeight:'90vh', overflow:'auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+          padding:'14px 20px', borderBottom:`1px solid ${t.border}` }}>
+          <span style={{ fontFamily:t.head, fontSize:19, fontWeight:700,
+            textTransform:'uppercase', letterSpacing:'0.06em', color:t.text }}>{title}</span>
+          <button onClick={onClose} style={{ background:'none', border:'none',
+            color:t.dim, fontSize:18, cursor:'pointer', lineHeight:1 }}>✕</button>
+        </div>
+        <div style={{ padding:20 }}>{children}</div>
       </div>
-      <div style={{ padding:20 }}>{children}</div>
     </div>
-  </div>
-)
+  )
+}
 
 const Row = ({ label, children }) => (
   <div style={{ marginBottom:14 }}><Label>{label}</Label>{children}</div>
@@ -558,9 +565,9 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
     return n
   })
 
-  const save = async () => {
-    if (!name)     { setErr('Part name is required'); return }
-    if (!finalSub) { setErr('Subcategory is required'); return }
+  const save = async (stayOpen = false) => {
+    if (!name)     { setErr('Part name is required'); return false }
+    if (!finalSub) { setErr('Subcategory is required'); return false }
     setSaving(true); setErr('')
 
     // Actual mode: compute deltas ONLY where base stat exists — skip the rest
@@ -571,10 +578,8 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         if (actual === '' || actual === undefined) return
         const base = (baseStats || {})[f.key]
         if (base !== undefined && base !== null && base !== '') {
-          // Has base stat → save delta
           finalEffects[f.key] = parseFloat((parseFloat(actual) - parseFloat(base)).toFixed(4))
         }
-        // No base stat → do NOT save this field (skip entirely)
       })
     }
 
@@ -595,8 +600,14 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
     const { error } = isEdit
       ? await supabase.from('car_parts').update(payload).eq('id', part.id)
       : await supabase.from('car_parts').insert(payload)
-    if (error) { setErr(`Save failed: ${error.message}`); setSaving(false); return }
-    onSaved()
+    if (error) { setErr(`Save failed: ${error.message}`); setSaving(false); return false }
+    setSaving(false)
+    if (!stayOpen) { onSaved(false); return true }
+    // Stay open: reset only name/effects/pi/price, keep category+subcategory
+    setName(''); setEffects({}); setPiChange(''); setPriceCr('')
+    setActualVals({}); setPrefillNote(''); setIsStock(false)
+    onSaved(true) // reload list but keep modal open
+    return true
   }
 
   const hasBaseStats = baseStats && Object.keys(baseStats).length > 0
@@ -789,8 +800,13 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
       })}
       {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, margin:'8px 0' }}>{err}</div>}
       <HR />
-      <div style={{ display:'flex', gap:8 }}>
-        <Btn onClick={save} disabled={saving}>{saving ? 'Saving...' : isEdit ? 'Update' : 'Add Part'}</Btn>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        <Btn onClick={() => save(false)} disabled={saving}>{saving ? 'Saving...' : isEdit ? 'Update' : 'Add Part'}</Btn>
+        {!isEdit && (
+          <Btn variant="ghost" disabled={saving} onClick={() => save(true)}>
+            Save &amp; Add Another
+          </Btn>
+        )}
         <Btn onClick={onClose} variant="ghost">Cancel</Btn>
       </div>
     </Modal>
@@ -998,6 +1014,19 @@ function CarDetail({ car, userId, userRole, onBack }) {
     if (!grouped[p.category][p.subcategory]) grouped[p.category][p.subcategory] = []
     grouped[p.category][p.subcategory].push(p)
   })
+  // Stock parts first within each subcategory
+  Object.values(grouped).forEach(subs =>
+    Object.keys(subs).forEach(sub => {
+      subs[sub].sort((a, b) => (b.is_stock ? 1 : 0) - (a.is_stock ? 1 : 0))
+    })
+  )
+  // Category-level completion counts
+  const catCompletion = {}
+  parts.forEach(p => {
+    if (!catCompletion[p.category]) catCompletion[p.category] = { total: 0, withEffects: 0 }
+    catCompletion[p.category].total++
+    if (p.effects && Object.keys(p.effects).length > 0) catCompletion[p.category].withEffects++
+  })
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
       {/* Header */}
@@ -1089,17 +1118,25 @@ function CarDetail({ car, userId, userRole, onBack }) {
         {loading && <div style={{ color:t.dim, fontSize:14, fontFamily:t.mono }}>Loading...</div>}
 
         {/* Category groups from DB */}
-        {Object.entries(grouped).map(([cat, subs]) => (
+        {Object.entries(grouped).map(([cat, subs]) => {
+          const cc = catCompletion[cat] || { total: 0, withEffects: 0 }
+          const catPct = cc.total > 0 ? Math.round((cc.withEffects / cc.total) * 100) : 0
+          const catColor = catPct === 100 ? t.green : catPct > 0 ? t.yellow : t.dim
+          return (
           <div key={cat} style={{ marginBottom:8 }}>
             <div onClick={() => toggleCat(cat)}
               style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
                 background:t.surf2, border:`1px solid ${t.border}`, borderRadius:6,
-                padding:'10px 14px', cursor:'pointer', marginBottom: expanded[cat]?0:0 }}>
+                padding:'10px 14px', cursor:'pointer' }}>
               <span style={{ fontFamily:t.head, fontSize:14, fontWeight:700,
                 textTransform:'uppercase', letterSpacing:'0.06em', color:t.accent }}>
                 {cat}
               </span>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:12, color:catColor, fontFamily:t.mono }}>
+                  {cc.withEffects}/{cc.total}
+                  {catPct === 100 ? ' ✓' : ''}
+                </span>
                 <span style={{ fontSize:14, color:t.dim, fontFamily:t.mono }}>
                   {Object.values(subs).flat().length} parts
                 </span>
@@ -1134,7 +1171,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
               </div>
             )}
           </div>
-        ))}
+        )})}
 
         {/* Empty state with quick-add by default category */}
         {!loading && parts.length === 0 && (
@@ -1173,7 +1210,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
         <PartModal carId={car.id} userId={userId} car={car} userRole={userRole} baseStats={car.base_stats || {}}
           prefillCat={prefCat} prefillSub={prefSub}
           onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); load(); setExpanded(p => ({ ...p, [prefCat]: true })) }} />
+          onSaved={(keepOpen) => { load(); if (!keepOpen) { setModal(null); setExpanded(p => ({ ...p, [prefCat]: true })) } }} />
       )}
       {modal && modal !== 'add' && (
         <PartModal part={modal} carId={car.id} userId={userId} car={car} userRole={userRole} baseStats={car.base_stats || {}}
@@ -1774,15 +1811,12 @@ function Garage({ userId, userRole, onSelectCar }) {
     setLoading(true)
     const { data } = await supabase.from('cars').select('*').order('make').order('model')
     setCars(data || [])
-    // Load part counts per car
-    const { data: counts } = await supabase.from('car_parts')
-      .select('car_id, effects')
+    // Efficient count query using aggregation
+    const { data: counts } = await supabase.rpc('get_car_part_counts')
     if (counts) {
       const map = {}
-      counts.forEach(p => {
-        if (!map[p.car_id]) map[p.car_id] = { total: 0, withEffects: 0 }
-        map[p.car_id].total++
-        if (p.effects && Object.keys(p.effects).length > 0) map[p.car_id].withEffects++
+      counts.forEach(r => {
+        map[r.car_id] = { total: parseInt(r.total), withEffects: parseInt(r.with_effects) }
       })
       setPartCounts(map)
     }
