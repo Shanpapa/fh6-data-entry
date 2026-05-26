@@ -666,26 +666,38 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 20px' }}>
         <Row label={inputMode === 'actual' && hasBaseStats ? `PI (base: ${car?.stock_pi ?? '?'})` : 'PI Change'}>
           <div>
-            <input type="number"
-              value={inputMode === 'actual' ? (actualVals['_pi'] ?? '') : (piChange ?? '')}
-              placeholder={inputMode === 'actual' ? String(car?.stock_pi ?? '—') : '0'}
-              step={1}
-              onChange={e => {
-                if (inputMode === 'actual') {
-                  setActualVals(p => ({ ...p, _pi: e.target.value === '' ? undefined : e.target.value }))
-                } else {
-                  setPiChange(e.target.value)
-                }
-              }}
-              style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
-                padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
-                width:'100%', outline:'none' }} />
-            {inputMode === 'actual' && actualVals['_pi'] !== undefined && car?.stock_pi && (
-              <div style={{ fontSize:11, color:t.blue, fontFamily:t.mono, marginTop:2 }}>
-                Δ {(parseInt(actualVals['_pi']) - parseInt(car.stock_pi)) >= 0 ? '+' : ''}
-                {parseInt(actualVals['_pi']) - parseInt(car.stock_pi)}
-              </div>
-            )}
+            {(() => {
+              // In actual mode: default to stock_pi + existing pi_change
+              const stockPi = car?.stock_pi ? parseInt(car.stock_pi) : null
+              const existingPiChange = part?.pi_change ?? 0
+              const defaultActualPi = stockPi !== null ? stockPi + existingPiChange : null
+              const piDisplayVal = inputMode === 'actual'
+                ? (actualVals['_pi'] ?? (defaultActualPi !== null ? String(defaultActualPi) : ''))
+                : (piChange ?? '')
+              const piDelta = inputMode === 'actual' && piDisplayVal !== '' && stockPi
+                ? parseInt(piDisplayVal) - stockPi : null
+              return <>
+                <input type="number"
+                  value={piDisplayVal}
+                  placeholder={inputMode === 'actual' ? String(stockPi ?? '—') : '0'}
+                  step={1}
+                  onChange={e => {
+                    if (inputMode === 'actual') {
+                      setActualVals(p => ({ ...p, _pi: e.target.value === '' ? undefined : e.target.value }))
+                    } else {
+                      setPiChange(e.target.value)
+                    }
+                  }}
+                  style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                    padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
+                    width:'100%', outline:'none' }} />
+                {piDelta !== null && (
+                  <div style={{ fontSize:11, color:t.blue, fontFamily:t.mono, marginTop:2 }}>
+                    Δ {piDelta >= 0 ? '+' : ''}{piDelta}
+                  </div>
+                )}
+              </>
+            })()}
           </div>
         </Row>
         <Row label="Price (CR)">
