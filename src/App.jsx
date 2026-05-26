@@ -570,16 +570,19 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
     if (!finalSub) { setErr('Subcategory is required'); return false }
     setSaving(true); setErr('')
 
-    // Actual mode: compute deltas ONLY where base stat exists — skip the rest
+    // Actual mode: save ALL fields that have base data
+    // If user didn't change a field, delta = 0 (base value used)
     let finalEffects = { ...effects }
     if (inputMode === 'actual') {
       EFFECT_FIELDS.filter(f => f.type === 'number').forEach(f => {
-        const actual = actualVals[f.key]
-        if (actual === '' || actual === undefined) return
         const base = (baseStats || {})[f.key]
-        if (base !== undefined && base !== null && base !== '') {
-          finalEffects[f.key] = parseFloat((parseFloat(actual) - parseFloat(base)).toFixed(4))
-        }
+        if (base === undefined || base === null || base === '') return
+        // Use user input if provided, otherwise fall back to base value (no change)
+        const userInput = actualVals[f.key]
+        const actualVal = (userInput !== undefined && userInput !== '')
+          ? parseFloat(userInput)
+          : parseFloat(base)
+        finalEffects[f.key] = parseFloat((actualVal - parseFloat(base)).toFixed(4))
       })
     }
 
