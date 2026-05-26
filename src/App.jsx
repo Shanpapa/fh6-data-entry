@@ -1221,37 +1221,52 @@ function CarDetail({ car, userId, userRole, onBack }) {
         {/* Quick-add buttons */}
         {!loading && (
           <div style={{ marginTop:16 }}>
-            <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
-              textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:8 }}>
-              Quick Add by Category
-            </div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
-              {Object.keys(CATEGORIES).map(cat => (
-                <button key={cat} onClick={() => openAdd(cat)}
-                  style={{ background:t.surf2, border:`1px solid ${t.border}`,
-                    color:t.mid, padding:'5px 12px', borderRadius:4,
-                    fontSize:12, fontFamily:t.mono, cursor:'pointer' }}>
-                  {cat}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
-              textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:8 }}>
-              Quick Add by Subcategory
-            </div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-              {Object.entries(CATEGORIES).flatMap(([cat, subs]) =>
-                subs.map(sub => (
-                  <button key={`${cat}__${sub}`} onClick={() => openAdd(cat, sub)}
-                    style={{ background:t.surf2, border:`1px solid ${t.border}`,
-                      color:t.mid, padding:'5px 12px', borderRadius:4,
-                      fontSize:12, fontFamily:t.mono, cursor:'pointer' }}
-                    title={cat}>
-                    {sub}
-                  </button>
-                ))
-              )}
-            </div>
+            {(() => {
+              // Merge predefined CATEGORIES with actual categories/subcategories on this car
+              const dbCats = {}
+              parts.forEach(p => {
+                if (!dbCats[p.category]) dbCats[p.category] = new Set()
+                dbCats[p.category].add(p.subcategory)
+              })
+              const allCats = { ...Object.fromEntries(Object.entries(CATEGORIES).map(([k,v]) => [k, new Set(v)])) }
+              Object.entries(dbCats).forEach(([cat, subs]) => {
+                if (!allCats[cat]) allCats[cat] = new Set()
+                subs.forEach(s => allCats[cat].add(s))
+              })
+              const catList = Object.keys(allCats)
+              const subList = catList.flatMap(cat => [...allCats[cat]].map(sub => ({ cat, sub })))
+              return <>
+                <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
+                  textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:8 }}>
+                  Quick Add by Category
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
+                  {catList.map(cat => (
+                    <button key={cat} onClick={() => openAdd(cat)}
+                      style={{ background:t.surf2, border:`1px solid ${t.border}`,
+                        color:t.mid, padding:'5px 12px', borderRadius:4,
+                        fontSize:12, fontFamily:t.mono, cursor:'pointer' }}>
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
+                  textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:8 }}>
+                  Quick Add by Subcategory
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {subList.map(({ cat, sub }) => (
+                    <button key={`${cat}__${sub}`} onClick={() => openAdd(cat, sub)}
+                      style={{ background:t.surf2, border:`1px solid ${t.border}`,
+                        color:t.mid, padding:'5px 12px', borderRadius:4,
+                        fontSize:12, fontFamily:t.mono, cursor:'pointer' }}
+                      title={cat}>
+                      {sub}
+                    </button>
+                  ))}
+                </div>
+              </>
+            })()}
           </div>
         )}
       </div>
