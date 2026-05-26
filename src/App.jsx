@@ -1273,13 +1273,15 @@ function CarDetail({ car, userId, userRole, onBack }) {
 
       {/* Modals */}
       {modal === 'add' && (
-        <PartModal carId={car.id} userId={userId} car={car} userRole={userRole} baseStats={car.base_stats || {}}
+        <PartModal carId={car.id} userId={userId} car={car} userRole={userRole}
+          baseStats={{ ...(car.base_stats || {}), front_weight_pct: car.front_weight_pct }}
           prefillCat={prefCat} prefillSub={prefSub}
           onClose={() => setModal(null)}
           onSaved={(keepOpen) => { load(); if (!keepOpen) { setModal(null); setExpanded(p => ({ ...p, [prefCat]: true })) } }} />
       )}
       {modal && modal !== 'add' && (
-        <PartModal part={modal} carId={car.id} userId={userId} car={car} userRole={userRole} baseStats={car.base_stats || {}}
+        <PartModal part={modal} carId={car.id} userId={userId} car={car} userRole={userRole}
+          baseStats={{ ...(car.base_stats || {}), front_weight_pct: car.front_weight_pct }}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load() }} />
       )}
