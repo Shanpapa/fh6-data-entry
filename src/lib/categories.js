@@ -49,7 +49,7 @@ export const EFFECT_FIELDS = [
   { key:'weight_kg',         label:'Weight (kg)',       type:'number', step:1,     group:'Car Stat', hint:'negative = lighter' },
   { key:'front_weight_pct',  label:'Front (%)',         type:'number', step:0.1,   group:'Car Stat', hint:'e.g. 54' },
   { key:'pwr_hp_kg',         label:'PWR (hp/kg)',       type:'number', step:0.01,  group:'Car Stat' },
-  { key:'displacement_l',    label:'Displacement (L)',  type:'number', step:0.001, group:'Car Stat' },
+  { key:'displacement_l',    label:'Displacement (L)',  type:'number', step:0.001, group:'Car Stat', ccInput:true },
   // ── Braking Distance ──────────────────────────────────────────────────
   { key:'brake_dist_97',     label:'97 km/h – 0 (m)',   type:'number', step:0.1,   group:'Braking Distance' },
   { key:'brake_dist_161',    label:'161 km/h – 0 (m)',  type:'number', step:0.1,   group:'Braking Distance' },
@@ -90,7 +90,7 @@ export const CAR_STAT_FIELDS = [
   { key:'torque_nm',         label:'Torque (Nm)',        type:'number', step:1     },
   { key:'weight_kg',         label:'Weight (kg)',        type:'number', step:1     },
   { key:'front_weight_pct',  label:'Front (%)',          type:'number', step:0.1,  col:'front_weight_pct' },
-  { key:'displacement_l',    label:'Displacement (L)',   type:'number', step:0.001 },
+  { key:'displacement_l',    label:'Displacement (L)',   type:'number', step:0.001, ccInput:true },
   { key:'top_speed_kmh',     label:'Top Speed (km/h)',   type:'number', step:0.1  },
   { key:'accel_0_100',       label:'0-100 kph (s)',      type:'number', step:0.001 },
   { key:'pwr_hp_kg',         label:'PWR (hp/kg)',        type:'number', step:0.01  },

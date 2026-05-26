@@ -344,7 +344,11 @@ function CarModal({ car, onClose, onSaved, userId }) {
   const updS = (k, v) => setBaseStats(p => {
     const n = { ...p }
     if (v === '' || v === null) { delete n[k]; return n }
-    n[k] = v; return n
+    const field = CAR_STAT_FIELDS.find(f => f.key === k)
+    let val = parseFloat(v)
+    if (field?.ccInput && val > 100) val = val / 1000
+    n[k] = isNaN(val) ? v : val
+    return n
   })
 
   const save = async () => {
@@ -478,7 +482,7 @@ function CarModal({ car, onClose, onSaved, userId }) {
             paddingBottom:4 }}>{group.label}</div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0 16px' }}>
             {CAR_STAT_FIELDS.filter(f => group.keys.includes(f.key)).map(f => (
-              <Row key={f.key} label={f.label}>
+              <Row key={f.key} label={f.label + (f.ccInput ? ' (cc or L)' : '')}>
                 {f.type === 'select'
                   ? <Select value={getStatVal(f.key)} onChange={v => setStatVal(f.key, v)}
                       placeholder="— select —" options={f.options} />
@@ -577,12 +581,15 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
       EFFECT_FIELDS.filter(f => f.type === 'number').forEach(f => {
         const base = (baseStats || {})[f.key]
         if (base === undefined || base === null || base === '') return
-        // Use user input if provided, otherwise fall back to base value (no change)
         const userInput = actualVals[f.key]
-        const actualVal = (userInput !== undefined && userInput !== '')
+        let actualVal = (userInput !== undefined && userInput !== '')
           ? parseFloat(userInput)
           : parseFloat(base)
-        finalEffects[f.key] = parseFloat((actualVal - parseFloat(base)).toFixed(4))
+        // cc→L auto-convert
+        if (f.ccInput && actualVal > 100) actualVal = actualVal / 1000
+        // displacement: round to 2dp to avoid floating point mismatch (1.809 vs 1.81)
+        const precision = f.ccInput ? 2 : 4
+        finalEffects[f.key] = parseFloat((actualVal - parseFloat(base)).toFixed(precision))
       })
     }
 
@@ -740,7 +747,13 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                 const useActual = inputMode === 'actual' && isNumeric
                 const baseVal   = (baseStats || {})[f.key]
                 const hasBase   = baseVal !== undefined && baseVal !== null && baseVal !== ''
-                // In actual mode: if no user input yet, show existing effect+base as default
+
+                // cc→L auto-convert: if value > 100, treat as cc and divide by 1000
+                const toL = (v) => {
+                  const n = parseFloat(v)
+                  return (!isNaN(n) && f.ccInput && n > 100) ? n / 1000 : n
+                }
+
                 const existingDelta = effects[f.key]
                 const defaultActual = hasBase && existingDelta !== undefined
                   ? parseFloat((parseFloat(baseVal) + parseFloat(existingDelta)).toFixed(4))
@@ -748,13 +761,19 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                 const actualDisplayVal = actualVals[f.key] !== undefined
                   ? actualVals[f.key]
                   : defaultActual !== undefined ? String(defaultActual) : ''
-                const deltaPreview = hasBase && actualDisplayVal !== ''
-                  ? parseFloat((parseFloat(actualDisplayVal) - parseFloat(baseVal)).toFixed(4))
+
+                // For delta preview, convert if ccInput
+                const actualForCalc = actualDisplayVal !== '' ? toL(actualDisplayVal) : null
+                const deltaPreview = hasBase && actualForCalc !== null
+                  ? parseFloat((actualForCalc - parseFloat(baseVal)).toFixed(4))
                   : null
+
+                // cc hint for label
+                const ccHint = f.ccInput ? ' — enter cc or L' : ''
 
                 return (
                   <Row key={f.key} label={
-                    useActual && hasBase ? `${f.label} (base: ${baseVal})`
+                    useActual && hasBase ? `${f.label} (base: ${baseVal}${ccHint})`
                     : f.hint ? `${f.label} (${f.hint})` : f.label
                   }>
                     {f.type === 'bool'
