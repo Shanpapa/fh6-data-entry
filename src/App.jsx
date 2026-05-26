@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
-import { CATEGORIES, EFFECT_FIELDS, CAR_STAT_FIELDS, CLASSES } from './lib/categories'
+import { CATEGORIES, EFFECT_FIELDS, EFFECT_GROUPS, CAR_STAT_FIELDS, CLASSES } from './lib/categories'
 
 // ── THEME ─────────────────────────────────────────────────
 const t = {
@@ -723,8 +723,9 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         </div>
       </div>
 
-      {['Main Stats','Engine','Braking','Lateral G','Speed','Aero','Flags'].map(group => {
+      {EFFECT_GROUPS.map(group => {
         const fields = EFFECT_FIELDS.filter(f => f.group === group)
+        if (fields.length === 0) return null
         return (
           <div key={group} style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono, textTransform:'uppercase',
@@ -736,12 +737,22 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                 const useActual = inputMode === 'actual' && isNumeric
                 const baseVal   = (baseStats || {})[f.key]
                 const hasBase   = baseVal !== undefined && baseVal !== null && baseVal !== ''
+                // In actual mode: if no user input yet, show existing effect+base as default
+                const existingDelta = effects[f.key]
+                const defaultActual = hasBase && existingDelta !== undefined
+                  ? parseFloat((parseFloat(baseVal) + parseFloat(existingDelta)).toFixed(4))
+                  : undefined
+                const actualDisplayVal = actualVals[f.key] !== undefined
+                  ? actualVals[f.key]
+                  : defaultActual !== undefined ? String(defaultActual) : ''
+                const deltaPreview = hasBase && actualDisplayVal !== ''
+                  ? parseFloat((parseFloat(actualDisplayVal) - parseFloat(baseVal)).toFixed(4))
+                  : null
 
                 return (
                   <Row key={f.key} label={
-                    useActual && hasBase
-                      ? `${f.label} (base: ${baseVal})`
-                      : f.label
+                    useActual && hasBase ? `${f.label} (base: ${baseVal})`
+                    : f.hint ? `${f.label} (${f.hint})` : f.label
                   }>
                     {f.type === 'bool'
                       ? <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
@@ -759,7 +770,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                           {hasBase
                             ? <>
                                 <input type="number"
-                                  value={actualVals[f.key] ?? ''}
+                                  value={actualDisplayVal}
                                   step={f.step}
                                   placeholder={String(baseVal)}
                                   onChange={e => setActualVals(p => ({
@@ -770,10 +781,14 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                                     border:`1px solid ${actualVals[f.key] !== undefined ? t.blue : t.border}`,
                                     color:t.text, padding:'7px 10px', borderRadius:4, fontSize:14,
                                     fontFamily:t.mono, width:'100%', outline:'none' }} />
-                                {actualVals[f.key] !== undefined && actualVals[f.key] !== '' && (
+                                {deltaPreview !== null && deltaPreview !== 0 && (
                                   <div style={{ fontSize:11, color:t.blue, fontFamily:t.mono, marginTop:2 }}>
-                                    Δ {parseFloat((parseFloat(actualVals[f.key]) - parseFloat(baseVal)).toFixed(4)) >= 0 ? '+' : ''}
-                                    {parseFloat((parseFloat(actualVals[f.key]) - parseFloat(baseVal)).toFixed(4))}
+                                    Δ {deltaPreview > 0 ? '+' : ''}{deltaPreview}
+                                  </div>
+                                )}
+                                {deltaPreview === 0 && (
+                                  <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono, marginTop:2 }}>
+                                    Δ 0 — no change
                                   </div>
                                 )}
                               </>
@@ -917,7 +932,8 @@ function CarDetail({ car, userId, userRole, onBack }) {
   const [modal,   setModal]   = useState(null)
   const [prefCat, setPrefCat] = useState('')
   const [prefSub, setPrefSub] = useState('')
-  const [expanded, setExpanded] = useState({})
+  const [expanded,    setExpanded]    = useState({})
+  const [expandedSub, setExpandedSub] = useState({})
   const [showClone, setShowClone] = useState(false)
   const [cloning,   setCloning]  = useState(false)
   const [cloneMsg,  setCloneMsg] = useState('')
@@ -991,6 +1007,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
   }
 
   const toggleCat = (cat) => setExpanded(p => ({ ...p, [cat]: !p[cat] }))
+  const toggleSub = (key) => setExpandedSub(p => ({ ...p, [key]: !p[key] }))
   const openAdd = (cat='', sub='') => { setPrefCat(cat); setPrefSub(sub); setModal('add') }
   const dtColor = { RWD:t.accent, FWD:t.blue, AWD:t.green }[car.stock_drivetrain] || t.dim
 
@@ -1154,27 +1171,37 @@ function CarDetail({ car, userId, userRole, onBack }) {
             {expanded[cat] && (
               <div style={{ border:`1px solid ${t.border}`, borderTop:'none',
                 borderRadius:'0 0 6px 6px', overflow:'hidden' }}>
-                {Object.entries(subs).map(([sub, subParts]) => (
+                {Object.entries(subs).map(([sub, subParts]) => {
+                  const subKey = `${cat}__${sub}`
+                  const subOpen = expandedSub[subKey] !== false // default open
+                  return (
                   <div key={sub}>
                     <div style={{ background:t.surf, padding:'8px 14px',
                       borderTop:`1px solid ${t.border}`,
-                      display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      display:'flex', justifyContent:'space-between', alignItems:'center',
+                      cursor:'pointer' }}
+                      onClick={() => toggleSub(subKey)}>
                       <span style={{ fontSize:14, color:t.mid, fontFamily:t.mono,
-                        fontWeight:700 }}>{sub}</span>
-                      <button onClick={() => openAdd(cat, sub)}
+                        fontWeight:700 }}>{sub}
+                        <span style={{ fontSize:11, color:t.dim, marginLeft:8 }}>
+                          {subParts.length} {subOpen ? '▲' : '▼'}
+                        </span>
+                      </span>
+                      <button onClick={e => { e.stopPropagation(); openAdd(cat, sub) }}
                         style={{ background:'none', border:'none', color:t.blue,
                           fontSize:13, fontFamily:t.mono, cursor:'pointer' }}>
                         + add here
                       </button>
                     </div>
-                    {subParts.map(p => (
+                    {subOpen && subParts.map(p => (
                       <PartRow key={p.id} part={p} userId={userId} userRole={userRole}
                         onEdit={() => setModal(p)}
                         onVerify={() => verify(p)}
                         onDelete={() => deletePart(p.id)} />
                     ))}
                   </div>
-                ))}
+                )})}
+
               </div>
             )}
           </div>
@@ -1191,22 +1218,39 @@ function CarDetail({ car, userId, userRole, onBack }) {
           </div>
         )}
 
-        {/* Quick-add buttons by default category */}
+        {/* Quick-add buttons */}
         {!loading && (
           <div style={{ marginTop:16 }}>
-            <div style={{ fontSize:14, color:t.dim, fontFamily:t.mono,
-              textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:10 }}>
+            <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
+              textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:8 }}>
               Quick Add by Category
             </div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
               {Object.keys(CATEGORIES).map(cat => (
                 <button key={cat} onClick={() => openAdd(cat)}
-                  style={{ background:t.surf, border:`1px solid ${t.border}`,
-                    color:t.mid, padding:'5px 12px', borderRadius:4, fontSize:13,
-                    fontFamily:t.mono, cursor:'pointer' }}>
+                  style={{ background:t.surf2, border:`1px solid ${t.border}`,
+                    color:t.mid, padding:'5px 12px', borderRadius:4,
+                    fontSize:12, fontFamily:t.mono, cursor:'pointer' }}>
                   {cat}
                 </button>
               ))}
+            </div>
+            <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
+              textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:8 }}>
+              Quick Add by Subcategory
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {Object.entries(CATEGORIES).flatMap(([cat, subs]) =>
+                subs.map(sub => (
+                  <button key={`${cat}__${sub}`} onClick={() => openAdd(cat, sub)}
+                    style={{ background:t.surf2, border:`1px solid ${t.border}`,
+                      color:t.mid, padding:'5px 12px', borderRadius:4,
+                      fontSize:12, fontFamily:t.mono, cursor:'pointer' }}
+                    title={cat}>
+                    {sub}
+                  </button>
+                ))
+              )}
             </div>
           </div>
         )}
