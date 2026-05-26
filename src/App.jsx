@@ -1091,8 +1091,15 @@ function CarDetail({ car, userId, userRole, onBack }) {
           ))}
         </div>
 
-        {/* Base stats */}
-        {car.base_stats && Object.keys(car.base_stats).length > 0 && (
+        {/* Missing front_weight_pct warning */}
+        {!car.front_weight_pct && (
+          <div style={{ background:`${t.yellow}11`, border:`1px solid ${t.yellow}44`,
+            borderRadius:6, padding:'8px 14px', marginBottom:8,
+            fontSize:12, fontFamily:t.mono, color:t.yellow }}>
+            ⚠ Front weight % not set — spring rate formula will use 52% fallback.
+            Edit the car to add it.
+          </div>
+        )}
           <div style={{ background:t.surf2, borderRadius:6, padding:'10px 14px',
             display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))', gap:'6px 12px' }}>
             {Object.entries(car.base_stats).map(([k, v]) => {
