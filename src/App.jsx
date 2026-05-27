@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import { CATEGORIES, EFFECT_FIELDS, EFFECT_GROUPS, CAR_STAT_FIELDS, CLASSES } from './lib/categories'
 
@@ -96,7 +96,7 @@ const Row = ({ label, children }) => (
 const HR = () => <div style={{ borderTop:`1px solid ${t.border}`, margin:'16px 0' }} />
 
 // ── AUTOCOMPLETE ──────────────────────────────────────────
-function Autocomplete({ value, onChange, onSelect, suggestions, placeholder, loading }) {
+function Autocomplete({ value, onChange, onSelect, suggestions, placeholder, loading, inputRef }) {
   const [open, setOpen] = useState(false)
   const filtered = suggestions.filter(s =>
     s.toLowerCase().includes((value||'').toLowerCase()) && s !== value
@@ -106,6 +106,7 @@ function Autocomplete({ value, onChange, onSelect, suggestions, placeholder, loa
   return (
     <div style={{ position:'relative' }}>
       <input
+        ref={inputRef}
         value={value ?? ''}
         placeholder={placeholder || ''}
         onChange={e => { onChange(e.target.value); setOpen(true) }}
@@ -529,6 +530,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   const [actualVals, setActualVals] = useState({})
   const [nameOptions, setNameOptions] = useState([])
   const [prefillNote, setPrefillNote] = useState('')
+  const nameInputRef = useRef(null)
 
   // Dynamic categories and subcategories from DB
   const [dbCatMap, setDbCatMap] = useState({}) // { category: [subcategory, ...] }
@@ -547,7 +549,12 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   }, [])
 
   const dbCats = Object.keys(dbCatMap).sort()
-  const dbSubs = cat && dbCatMap[cat] ? dbCatMap[cat] : []
+  const dbSubs = (() => {
+    const base = cat && dbCatMap[cat] ? dbCatMap[cat] : []
+    // Always include current sub even if not yet in DB (fresh load)
+    if (sub && !base.includes(sub)) return [...base, sub].sort()
+    return base
+  })()
 
   const finalCat = useCustomCat ? customCat : cat
   const finalSub = useCustomSub ? customSub : sub
@@ -632,7 +639,9 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
     // Stay open: reset only name/effects/pi/price, keep category+subcategory
     setName(''); setEffects({}); setPiChange(''); setPriceCr('')
     setActualVals({}); setPrefillNote(''); setIsStock(false)
-    onSaved(true) // reload list but keep modal open
+    onSaved(true)
+    // Focus name input
+    setTimeout(() => nameInputRef.current?.focus(), 50)
     return true
   }
 
@@ -670,7 +679,8 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         <Autocomplete value={name} onChange={setName}
           onSelect={handleNameSelect}
           suggestions={nameOptions}
-          placeholder="Sport fék" />
+          placeholder="Sport Intake"
+          inputRef={nameInputRef} />
       </Row>
       {prefillNote && (
         <div style={{ fontSize:12, color:t.blue, fontFamily:t.mono, marginBottom:12,
@@ -1411,17 +1421,17 @@ import Papa from 'papaparse'
 const IMPORT_COLUMNS = [
   'car_id','category','subcategory','name','is_stock','pi_change','price_cr',
   'stat_speed','stat_handling','stat_acceleration','stat_launch','stat_braking','stat_offroad',
-  'power_hp','torque_nm','weight_kg','top_speed_kmh','accel_0_97','accel_0_161',
-  'brake_dist_97','brake_dist_161','lateral_g_97','lateral_g_193',
+  'power_hp','torque_nm','weight_kg','front_weight_pct','top_speed_kmh','accel_0_97','accel_0_161',
+  'brake_dist_97','brake_dist_161','lateral_g_97','lateral_g_193','displacement_l',
   'aero_efficiency','aero_balance','mech_balance',
-  'compound_type','unlocks_tuning','unlock_type'
+  'compound_type','unlocks_tuning','unlock_type','drivetrain_result'
 ]
 const EFFECT_KEYS = [
   'stat_speed','stat_handling','stat_acceleration','stat_launch','stat_braking','stat_offroad',
-  'power_hp','torque_nm','weight_kg','top_speed_kmh','accel_0_97','accel_0_161',
-  'brake_dist_97','brake_dist_161','lateral_g_97','lateral_g_193',
+  'power_hp','torque_nm','weight_kg','front_weight_pct','top_speed_kmh','accel_0_97','accel_0_161',
+  'brake_dist_97','brake_dist_161','lateral_g_97','lateral_g_193','displacement_l',
   'aero_efficiency','aero_balance','mech_balance',
-  'compound_type','unlocks_tuning','unlock_type'
+  'compound_type','unlocks_tuning','unlock_type','drivetrain_result'
 ]
 const NUMERIC_KEYS = [
   'pi_change','price_cr',

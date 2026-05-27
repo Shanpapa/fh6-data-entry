@@ -68,9 +68,11 @@ export const EFFECT_FIELDS = [
   // ── Flags ─────────────────────────────────────────────────────────────
   { key:'unlocks_tuning',    label:'Unlocks tuning sliders', type:'bool', group:'Flags' },
   { key:'unlock_type',       label:'Unlock type',       type:'select', group:'Flags',
-    options:['','springs_dampers','arb','differential','transmission','aero'] },
+    options:['','springs_dampers','arb_front','arb_rear','differential','transmission','aero'] },
   { key:'compound_type',     label:'Compound type',     type:'select', group:'Flags',
     options:['','Stock','Street','Sport','Semi-Slick','Race Slick','Rally','Drift','Off-Road'] },
+  { key:'drivetrain_result', label:'Drivetrain swap result', type:'select', group:'Flags',
+    options:['','RWD','FWD','AWD'] },
 ]
 
 // Derived: ordered unique group names for rendering
