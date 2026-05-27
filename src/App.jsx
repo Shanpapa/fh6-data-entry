@@ -988,6 +988,7 @@ function CloneModal({ currentCar, onClose, onClone, cloning }) {
 // ── CAR DETAIL VIEW ───────────────────────────────────────
 function CarDetail({ car, userId, userRole, onBack }) {
   const [parts,   setParts]   = useState([])
+  const [allDbCatMap, setAllDbCatMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [modal,   setModal]   = useState(null)
   const [prefCat, setPrefCat] = useState('')
@@ -1002,9 +1003,20 @@ function CarDetail({ car, userId, userRole, onBack }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('car_parts')
-      .select('*').eq('car_id', car.id).order('category').order('subcategory').order('name')
-    setParts(data || [])
+    const [{ data: partsData }, { data: allCatData }] = await Promise.all([
+      supabase.from('car_parts').select('*').eq('car_id', car.id).order('category').order('subcategory').order('name'),
+      supabase.from('car_parts').select('category, subcategory').order('category').order('subcategory'),
+    ])
+    setParts(partsData || [])
+    // Build global category→subcategory map from ALL car_parts
+    const map = {}
+    ;(allCatData || []).forEach(r => {
+      if (!map[r.category]) map[r.category] = new Set()
+      if (r.subcategory) map[r.category].add(r.subcategory)
+    })
+    setAllDbCatMap(Object.fromEntries(
+      Object.entries(map).map(([k, v]) => [k, [...v].sort()])
+    ))
     setLoading(false)
   }, [car.id])
 
@@ -1283,19 +1295,11 @@ function CarDetail({ car, userId, userRole, onBack }) {
         {!loading && (
           <div style={{ marginTop:16 }}>
             {(() => {
-              // Merge predefined CATEGORIES with actual categories/subcategories on this car
-              const dbCats = {}
-              parts.forEach(p => {
-                if (!dbCats[p.category]) dbCats[p.category] = new Set()
-                dbCats[p.category].add(p.subcategory)
-              })
-              const allCats = { ...Object.fromEntries(Object.entries(CATEGORIES).map(([k,v]) => [k, new Set(v)])) }
-              Object.entries(dbCats).forEach(([cat, subs]) => {
-                if (!allCats[cat]) allCats[cat] = new Set()
-                subs.forEach(s => allCats[cat].add(s))
-              })
-              const catList = Object.keys(allCats).sort()
-              const subList = catList.flatMap(cat => [...allCats[cat]].map(sub => ({ cat, sub }))).sort((a, b) => a.sub.localeCompare(b.sub))
+              // Build from global DB data only — no hardcoded categories
+              const catList = Object.keys(allDbCatMap).sort()
+              const subList = catList.flatMap(cat =>
+                (allDbCatMap[cat] || []).map(sub => ({ cat, sub }))
+              ).sort((a, b) => a.sub.localeCompare(b.sub))
               return <>
                 <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
                   textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:8 }}>
