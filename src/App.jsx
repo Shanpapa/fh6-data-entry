@@ -511,8 +511,7 @@ function CarModal({ car, onClose, onSaved, userId }) {
 // ── PART FORM MODAL ───────────────────────────────────────
 function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, userId, baseStats, car, userRole }) {
   const isEdit = !!part?.id
-  const allCats = Object.keys(CATEGORIES)
-  const [cat,  setCat]  = useState(part?.category    || prefillCat || allCats[0])
+  const [cat,  setCat]  = useState(part?.category    || prefillCat || '')
   const [sub,  setSub]  = useState(part?.subcategory || prefillSub || '')
   const [customCat, setCustomCat] = useState('')
   const [customSub, setCustomSub] = useState('')
@@ -528,11 +527,28 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   const [saving,   setSaving]   = useState(false)
   const [inputMode, setInputMode] = useState(getActualModePref())
   const [actualVals, setActualVals] = useState({})
-
   const [nameOptions, setNameOptions] = useState([])
   const [prefillNote, setPrefillNote] = useState('')
 
-  const subs = CATEGORIES[cat] || []
+  // Dynamic categories and subcategories from DB
+  const [dbCatMap, setDbCatMap] = useState({}) // { category: [subcategory, ...] }
+  useEffect(() => {
+    supabase.from('car_parts').select('category, subcategory').order('category').order('subcategory')
+      .then(({ data }) => {
+        const map = {}
+        ;(data || []).forEach(r => {
+          if (!map[r.category]) map[r.category] = new Set()
+          if (r.subcategory) map[r.category].add(r.subcategory)
+        })
+        setDbCatMap(Object.fromEntries(
+          Object.entries(map).map(([k, v]) => [k, [...v].sort()])
+        ))
+      })
+  }, [])
+
+  const dbCats = Object.keys(dbCatMap).sort()
+  const dbSubs = cat && dbCatMap[cat] ? dbCatMap[cat] : []
+
   const finalCat = useCustomCat ? customCat : cat
   const finalSub = useCustomSub ? customSub : sub
 
@@ -628,25 +644,25 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         <Row label="Category">
           {!useCustomCat
             ? <Select value={cat} onChange={v => { setCat(v); setSub(''); setName(''); setEffects({}) }}
-                options={allCats} />
+                placeholder="— select —" options={dbCats} />
             : <Input value={customCat} onChange={setCustomCat} placeholder="New category name" />
           }
           <button onClick={() => setUseCustomCat(p => !p)}
             style={{ background:'none', border:'none', color:t.blue, fontSize:13,
               fontFamily:t.mono, cursor:'pointer', marginTop:4, padding:0 }}>
-            {useCustomCat ? '← Use predefined' : '+ New category'}
+            {useCustomCat ? '← Use existing' : '+ New category'}
           </button>
         </Row>
         <Row label="Subcategory">
           {!useCustomSub
             ? <Select value={sub} onChange={v => { setSub(v); setName(''); setEffects({}) }}
-                placeholder="— select —" options={subs} />
+                placeholder="— select —" options={dbSubs} />
             : <Input value={customSub} onChange={setCustomSub} placeholder="New subcategory name" />
           }
           <button onClick={() => setUseCustomSub(p => !p)}
             style={{ background:'none', border:'none', color:t.blue, fontSize:13,
               fontFamily:t.mono, cursor:'pointer', marginTop:4, padding:0 }}>
-            {useCustomSub ? '← Use predefined' : '+ New subcategory'}
+            {useCustomSub ? '← Use existing' : '+ New subcategory'}
           </button>
         </Row>
       </div>
