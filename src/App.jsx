@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabase'
-import { CATEGORIES, EFFECT_FIELDS, EFFECT_GROUPS, CAR_STAT_FIELDS, CLASSES } from './lib/categories'
+import { CATEGORIES, EFFECT_FIELDS, EFFECT_GROUPS, HIDDEN_STAT_FIELDS, CAR_STAT_FIELDS, CLASSES } from './lib/categories'
 
 // ── THEME ─────────────────────────────────────────────────
 const t = {
@@ -532,6 +532,13 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   const [prefillNote, setPrefillNote] = useState('')
   const nameInputRef = useRef(null)
 
+  // Hidden stats
+  const [showHidden,    setShowHidden]    = useState(
+    () => HIDDEN_STAT_FIELDS.some(f => part?.effects?.[f.key] !== undefined)
+  )
+  const [hiddenStatKey, setHiddenStatKey] = useState('')
+  const [hiddenStatVal, setHiddenStatVal] = useState('')
+
   // Dynamic categories and subcategories from DB
   const [dbCatMap, setDbCatMap] = useState({}) // { category: [subcategory, ...] }
   useEffect(() => {
@@ -873,6 +880,90 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
           </div>
         )
       })}
+      {/* Hidden Stats */}
+      <HR />
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+        <input type="checkbox" checked={showHidden}
+          onChange={e => setShowHidden(e.target.checked)}
+          style={{ accentColor:t.accent, width:14, height:14 }} />
+        <span style={{ fontSize:13, fontFamily:t.mono, color:t.mid }}>
+          Hidden stats (only visible at part level in-game)
+        </span>
+      </div>
+      {showHidden && (
+        <div style={{ background:t.surf2, border:`1px solid ${t.border}`, borderRadius:6, padding:12, marginBottom:14 }}>
+          {/* Existing hidden stat values */}
+          {HIDDEN_STAT_FIELDS.filter(f => effects[f.key] !== undefined).map(f => (
+            <div key={f.key} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+              <span style={{ fontSize:12, color:t.blue, fontFamily:t.mono, minWidth:140 }}>
+                {f.label}
+              </span>
+              <span style={{ fontSize:13, color:t.text, fontFamily:t.mono, flex:1 }}>
+                {String(effects[f.key])}
+              </span>
+              <button onClick={() => setEffect(f.key, undefined)}
+                style={{ background:'none', border:`1px solid ${t.border}`, color:t.red,
+                  padding:'2px 8px', borderRadius:3, fontSize:12, fontFamily:t.mono, cursor:'pointer' }}>
+                ×
+              </button>
+            </div>
+          ))}
+          {/* Add new hidden stat */}
+          <div style={{ display:'flex', gap:8, alignItems:'flex-end', marginTop:8 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono,
+                textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>Stat</div>
+              <select value={hiddenStatKey} onChange={e => { setHiddenStatKey(e.target.value); setHiddenStatVal('') }}
+                style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                  padding:'7px 10px', borderRadius:4, fontSize:13, fontFamily:t.mono,
+                  width:'100%', outline:'none', cursor:'pointer' }}>
+                <option value="">— select stat —</option>
+                {HIDDEN_STAT_FIELDS.filter(f => effects[f.key] === undefined).map(f => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}{f.hint ? ` (${f.hint})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono,
+                textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>Value</div>
+              {(() => {
+                const field = HIDDEN_STAT_FIELDS.find(f => f.key === hiddenStatKey)
+                if (!field) return (
+                  <input disabled placeholder="—"
+                    style={{ background:t.surf2, border:`1px solid ${t.border}33`, color:t.dim,
+                      padding:'7px 10px', borderRadius:4, fontSize:13, fontFamily:t.mono, width:'100%' }} />
+                )
+                if (field.type === 'select') return (
+                  <select value={hiddenStatVal} onChange={e => setHiddenStatVal(e.target.value)}
+                    style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                      padding:'7px 10px', borderRadius:4, fontSize:13, fontFamily:t.mono,
+                      width:'100%', outline:'none', cursor:'pointer' }}>
+                    {field.options.map(o => <option key={o} value={o}>{o || '— select —'}</option>)}
+                  </select>
+                )
+                return (
+                  <input type="number" value={hiddenStatVal} step={field.step}
+                    placeholder={field.hint || '0'}
+                    onChange={e => setHiddenStatVal(e.target.value)}
+                    style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                      padding:'7px 10px', borderRadius:4, fontSize:13, fontFamily:t.mono,
+                      width:'100%', outline:'none' }} />
+                )
+              })()}
+            </div>
+            <Btn small onClick={() => {
+              if (!hiddenStatKey || hiddenStatVal === '') return
+              const field = HIDDEN_STAT_FIELDS.find(f => f.key === hiddenStatKey)
+              const val = field?.type === 'number' ? parseFloat(hiddenStatVal) : hiddenStatVal
+              setEffect(hiddenStatKey, val)
+              setHiddenStatKey(''); setHiddenStatVal('')
+            }}>+ Add</Btn>
+          </div>
+        </div>
+      )}
+
       {err && <div style={{ color:t.red, fontSize:13, fontFamily:t.mono, margin:'8px 0' }}>{err}</div>}
       <HR />
       <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>

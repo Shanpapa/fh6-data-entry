@@ -78,6 +78,19 @@ export const EFFECT_FIELDS = [
 // Derived: ordered unique group names for rendering
 export const EFFECT_GROUPS = [...new Set(EFFECT_FIELDS.map(f => f.group))]
 
+// ── HIDDEN STAT FIELDS ────────────────────────────────────────────────────
+// Stats the game shows only at part level, not on the main PI screen.
+// Add new entries here as they are discovered — no other code changes needed.
+export const HIDDEN_STAT_FIELDS = [
+  { key:'ride_height_cm',  label:'Ride Height (cm)',   type:'number', step:0.1,  hint:'negative = lower' },
+  { key:'shift_time_s',    label:'Shift Time (s)',      type:'number', step:0.01, hint:'negative = faster' },
+  { key:'grip_bonus',      label:'Grip Bonus',          type:'number', step:0.01, hint:'positive = more grip' },
+  { key:'tyre_width_mm',   label:'Tyre Width (mm)',     type:'number', step:1 },
+  { key:'track_width_mm',  label:'Track Width (mm)',    type:'number', step:1 },
+  { key:'diff_type',       label:'Diff Type',           type:'select',
+    options:['','1way','1.5way','2way'] },
+]
+
 // ── CAR BASE STATS ────────────────────────────────────────────────────────
 export const CAR_STAT_FIELDS = [
   // Performance Index
