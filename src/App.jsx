@@ -1285,7 +1285,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
                 subs.forEach(s => allCats[cat].add(s))
               })
               const catList = Object.keys(allCats).sort()
-              const subList = catList.flatMap(cat => [...allCats[cat]].sort().map(sub => ({ cat, sub })))
+              const subList = catList.flatMap(cat => [...allCats[cat]].map(sub => ({ cat, sub }))).sort((a, b) => a.sub.localeCompare(b.sub))
               return <>
                 <div style={{ fontSize:11, color:t.dim, fontFamily:t.mono,
                   textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:8 }}>
