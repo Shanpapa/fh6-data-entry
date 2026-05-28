@@ -604,17 +604,19 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
     if (!finalSub) { setErr('Subcategory is required'); return false }
     setSaving(true); setErr('')
 
-    // Actual mode: save ALL fields that have base data
-    // If user didn't change a field, delta = 0 (base value used)
+    // Actual mode: compute delta only for fields the user actually entered.
+    // A blank field is left UNTOUCHED — this preserves an existing delta when
+    // editing, and stays absent on a new part. We never force-write 0 for an
+    // untouched field (that was the bug: re-saving a part in actual mode without
+    // re-typing every field wiped all existing deltas to 0).
     let finalEffects = { ...effects }
     if (inputMode === 'actual') {
       EFFECT_FIELDS.filter(f => f.type === 'number').forEach(f => {
         const base = (baseStats || {})[f.key]
         if (base === undefined || base === null || base === '') return
         const userInput = actualVals[f.key]
-        let actualVal = (userInput !== undefined && userInput !== '')
-          ? parseFloat(userInput)
-          : parseFloat(base)
+        if (userInput === undefined || userInput === '') return  // untouched → keep existing
+        let actualVal = parseFloat(userInput)
         // cc→L auto-convert
         if (f.ccInput && actualVal > 100) actualVal = actualVal / 1000
         // displacement: round to 2dp to avoid floating point mismatch (1.809 vs 1.81)
@@ -759,7 +761,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
             {inputMode === 'delta'
               ? 'Enter the change (+/-) directly from the game.'
               : hasBaseStats
-                ? 'Enter the value shown in-game after installing. Delta auto-calculated.'
+                ? 'Enter the value shown in-game after installing. Delta auto-calculated. Leave a field blank to keep it unchanged.'
                 : '⚠ No base stats on this car — actual mode will save values as-is.'}
           </div>
         </div>
