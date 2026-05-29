@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import { CATEGORIES, EFFECT_FIELDS, EFFECT_GROUPS, HIDDEN_STAT_FIELDS, CAR_STAT_FIELDS, CLASSES } from './lib/categories'
 
@@ -526,7 +526,6 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
   const [effects,  setEffects]  = useState(part?.effects  || {})
   const [err,      setErr]      = useState('')
   const [saving,   setSaving]   = useState(false)
-  const [inputMode, setInputMode] = useState(getActualModePref())
   const [actualVals, setActualVals] = useState({})
   const [nameOptions, setNameOptions] = useState([])
   const [prefillNote, setPrefillNote] = useState('')
@@ -610,8 +609,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
     // untouched field (that was the bug: re-saving a part in actual mode without
     // re-typing every field wiped all existing deltas to 0).
     let finalEffects = { ...effects }
-    if (inputMode === 'actual') {
-      EFFECT_FIELDS.filter(f => f.type === 'number').forEach(f => {
+    EFFECT_FIELDS.filter(f => f.type === 'number').forEach(f => {
         const base = (baseStats || {})[f.key]
         if (base === undefined || base === null || base === '') return
         const userInput = actualVals[f.key]
@@ -621,13 +619,14 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         if (f.ccInput && actualVal > 100) actualVal = actualVal / 1000
         // displacement: round to 2dp to avoid floating point mismatch (1.809 vs 1.81)
         const precision = f.ccInput ? 2 : 4
-        finalEffects[f.key] = parseFloat((actualVal - parseFloat(base)).toFixed(precision))
+        const delta = parseFloat((actualVal - parseFloat(base)).toFixed(precision))
+        if (delta !== 0) finalEffects[f.key] = delta
+        else delete finalEffects[f.key]   // sparse: ne tároljunk 0-deltát
       })
-    }
 
     // Compute PI change
     let finalPiChange = piChange !== '' ? parseInt(piChange) : 0
-    if (inputMode === 'actual' && actualVals['_pi'] !== undefined && car?.stock_pi) {
+    if (actualVals['_pi'] !== undefined && car?.stock_pi) {
       finalPiChange = parseInt(actualVals['_pi']) - parseInt(car.stock_pi)
     }
 
@@ -699,30 +698,22 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
         </div>
       )}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 20px' }}>
-        <Row label={inputMode === 'actual' && hasBaseStats ? `PI (base: ${car?.stock_pi ?? '?'})` : 'PI Change'}>
+        <Row label={hasBaseStats ? `PI (base: ${car?.stock_pi ?? '?'})` : 'PI Change'}>
           <div>
             {(() => {
               // In actual mode: default to stock_pi + existing pi_change
               const stockPi = car?.stock_pi ? parseInt(car.stock_pi) : null
               const existingPiChange = part?.pi_change ?? 0
               const defaultActualPi = stockPi !== null ? stockPi + existingPiChange : null
-              const piDisplayVal = inputMode === 'actual'
-                ? (actualVals['_pi'] ?? (defaultActualPi !== null ? String(defaultActualPi) : ''))
-                : (piChange ?? '')
-              const piDelta = inputMode === 'actual' && piDisplayVal !== '' && stockPi
+              const piDisplayVal = actualVals['_pi'] ?? (defaultActualPi !== null ? String(defaultActualPi) : '')
+              const piDelta = piDisplayVal !== '' && stockPi
                 ? parseInt(piDisplayVal) - stockPi : null
               return <>
                 <input type="number"
                   value={piDisplayVal}
-                  placeholder={inputMode === 'actual' ? String(stockPi ?? '—') : '0'}
+                  placeholder={String(stockPi ?? '—')}
                   step={1}
-                  onChange={e => {
-                    if (inputMode === 'actual') {
-                      setActualVals(p => ({ ...p, _pi: e.target.value === '' ? undefined : e.target.value }))
-                    } else {
-                      setPiChange(e.target.value)
-                    }
-                  }}
+                  onChange={e => setActualVals(p => ({ ...p, _pi: e.target.value === '' ? undefined : e.target.value }))}
                   style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
                     padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
                     width:'100%', outline:'none' }} />
@@ -758,25 +749,10 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
           <div style={{ fontSize:11, color:t.accent, fontFamily:t.mono,
             textTransform:'uppercase', letterSpacing:'0.12em' }}>Effects</div>
           <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono, marginTop:2 }}>
-            {inputMode === 'delta'
-              ? 'Enter the change (+/-) directly from the game.'
-              : hasBaseStats
-                ? 'Enter the value shown in-game after installing. Delta auto-calculated. Leave a field blank to keep it unchanged.'
-                : '⚠ No base stats on this car — actual mode will save values as-is.'}
+            {hasBaseStats
+              ? 'Enter the value shown in-game after installing. Delta auto-calculated. Leave a field blank to keep it unchanged.'
+              : '\u26a0 No base stats on this car — values saved as-is.'}
           </div>
-        </div>
-        <div style={{ display:'flex', background:t.surf2, borderRadius:6,
-          padding:3, gap:3, flexShrink:0 }}>
-          {[['delta','Δ Delta'],['actual','= Actual']].map(([mode, label]) => (
-            <button key={mode} onClick={() => { setInputMode(mode); setActualModePref(mode) }}
-              style={{ background: inputMode===mode ? t.surf3 : 'transparent',
-                border: inputMode===mode ? `1px solid ${t.accent}` : '1px solid transparent',
-                color: inputMode===mode ? t.accent : t.dim,
-                padding:'5px 12px', borderRadius:4, fontSize:12, fontFamily:t.mono,
-                cursor:'pointer', fontWeight:700 }}>
-              {label}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -791,7 +767,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0 16px' }}>
               {fields.map(f => {
                 const isNumeric = f.type === 'number'
-                const useActual = inputMode === 'actual' && isNumeric
+                const useActual = isNumeric
                 const baseVal   = (baseStats || {})[f.key]
                 const hasBase   = baseVal !== undefined && baseVal !== null && baseVal !== ''
 
@@ -802,6 +778,8 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                 }
 
                 const existingDelta = effects[f.key]
+                // Red border when editing and field has no saved data yet
+                const hasNoData = isEdit && existingDelta === undefined
                 const defaultActual = hasBase && existingDelta !== undefined
                   ? parseFloat((parseFloat(baseVal) + parseFloat(existingDelta)).toFixed(4))
                   : undefined
@@ -834,8 +812,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                       : f.type === 'select'
                       ? <Select value={effects[f.key] || ''} onChange={v => setEffect(f.key, v || undefined)}
                           placeholder="— none —" options={f.options} />
-                      : useActual
-                      ? <div>
+                      : <div>
                           {hasBase
                             ? <>
                                 <input type="number"
@@ -846,8 +823,8 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                                     ...p,
                                     [f.key]: e.target.value === '' ? undefined : e.target.value
                                   }))}
-                                  style={{ background:t.surf3,
-                                    border:`1px solid ${actualVals[f.key] !== undefined ? t.blue : t.border}`,
+                                  style={{ background: hasNoData && actualVals[f.key] === undefined ? 'rgba(248,113,113,0.07)' : t.surf3,
+                                    border:`1px solid ${actualVals[f.key] !== undefined ? t.blue : hasNoData ? t.red : t.border}`,
                                     color:t.text, padding:'7px 10px', borderRadius:4, fontSize:14,
                                     fontFamily:t.mono, width:'100%', outline:'none' }} />
                                 {deltaPreview !== null && deltaPreview !== 0 && (
@@ -860,6 +837,11 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                                     Δ 0 — no change
                                   </div>
                                 )}
+                               {hasNoData && actualVals[f.key] === undefined && deltaPreview === null && (
+                                  <div style={{ fontSize:10, color:t.red, fontFamily:t.mono, marginTop:2 }}>
+                                    no data
+                                  </div>
+                                )}
                               </>
                             : <div style={{ padding:'7px 10px', background:t.surf2,
                                 border:`1px solid ${t.border}33`, borderRadius:4,
@@ -868,12 +850,7 @@ function PartModal({ part, carId, prefillCat, prefillSub, onClose, onSaved, user
                               </div>
                           }
                         </div>
-                      : <input type="number" value={effects[f.key] ?? ''} step={f.step}
-                          placeholder="—"
-                          onChange={e => setEffect(f.key, e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                          style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
-                            padding:'7px 10px', borderRadius:4, fontSize:14, fontFamily:t.mono,
-                            width:'100%', outline:'none' }} />
+
                     }
                   </Row>
                 )
@@ -2017,8 +1994,6 @@ function DescriptionModal({ item, onClose, onSaved }) {
 
 // ── GARAGE / CAR LIST ─────────────────────────────────────
 // Actual mode preference persisted in sessionStorage
-const getActualModePref = () => sessionStorage.getItem('fh6_input_mode') || 'delta'
-const setActualModePref = (m) => sessionStorage.setItem('fh6_input_mode', m)
 
 function Garage({ userId, userRole, onSelectCar }) {
   const [cars,       setCars]      = useState([])
