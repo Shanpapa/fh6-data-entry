@@ -1070,6 +1070,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
   const [cloneMsg,  setCloneMsg] = useState('')
   const [showEmptyOnly, setShowEmptyOnly] = useState(false)
   const [bulkVerifying, setBulkVerifying] = useState(false)
+  const [showIncompat,  setShowIncompat]  = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1186,6 +1187,11 @@ function CarDetail({ car, userId, userRole, onBack }) {
     catCompletion[p.category].total++
     if (p.effects && Object.keys(p.effects).length > 0) catCompletion[p.category].withEffects++
   })
+  if (showIncompat) return (
+    <IncompatibilityView car={car} parts={parts} userId={userId}
+      onBack={() => setShowIncompat(false)} />
+  )
+
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column' }}>
       {/* Header */}
@@ -1221,6 +1227,7 @@ function CarDetail({ car, userId, userRole, onBack }) {
               {bulkVerifying ? 'Verifying...' : `Verify all (${unverifiedParts.length})`}
             </Btn>
           )}
+          <Btn small variant="ghost" onClick={() => setShowIncompat(true)}>⛔ Incompatibilities</Btn>
           <Btn onClick={() => openAdd()}>+ Add Part</Btn>
         </div>
 
@@ -1989,6 +1996,245 @@ function DescriptionModal({ item, onClose, onSaved }) {
         <Btn onClick={onClose} variant="ghost">Cancel</Btn>
       </div>
     </Modal>
+  )
+}
+
+// ── INCOMPATIBILITY MANAGER ───────────────────────────────
+function IncompatibilityView({ car, parts, userId, onBack }) {
+  const [incompats, setIncompats] = useState([])
+  const [selected,  setSelected]  = useState(null)
+  const [pending,   setPending]   = useState(new Set())
+  const [saving,    setSaving]    = useState(false)
+  const [status,    setStatus]    = useState('')
+  const [loading,   setLoading]   = useState(true)
+
+  const partIds = parts.map(p => p.id)
+
+  useEffect(() => {
+    if (partIds.length === 0) { setLoading(false); return }
+    supabase.from('part_incompatibilities')
+      .select('*')
+      .or(`part_a_id.in.(${partIds.join(',')}),part_b_id.in.(${partIds.join(',')})`)
+      .then(({ data }) => { setIncompats(data || []); setLoading(false) })
+  }, [])
+
+  const buildIncompatMap = (rows) => {
+    const map = {}
+    rows.forEach(row => {
+      if (!map[row.part_a_id]) map[row.part_a_id] = new Set()
+      if (!map[row.part_b_id]) map[row.part_b_id] = new Set()
+      map[row.part_a_id].add(row.part_b_id)
+      map[row.part_b_id].add(row.part_a_id)
+    })
+    return map
+  }
+  const incompatMap = buildIncompatMap(incompats)
+
+  const selectedId = selected?.id
+  useEffect(() => {
+    setPending(new Set(incompatMap[selectedId] || []))
+  }, [selectedId, incompats])
+
+  const grouped = {}
+  parts.forEach(p => {
+    if (!grouped[p.category]) grouped[p.category] = {}
+    if (!grouped[p.category][p.subcategory]) grouped[p.category][p.subcategory] = []
+    grouped[p.category][p.subcategory].push(p)
+  })
+
+  const isDirty = (() => {
+    if (!selected) return false
+    const orig = incompatMap[selected.id] || new Set()
+    if (orig.size !== pending.size) return true
+    for (const id of pending) if (!orig.has(id)) return true
+    return false
+  })()
+
+  const toggle = (partId) => setPending(prev => {
+    const next = new Set(prev)
+    if (next.has(partId)) next.delete(partId)
+    else next.add(partId)
+    return next
+  })
+
+  const save = async () => {
+    if (!selected) return
+    setSaving(true); setStatus('')
+    const orig     = incompatMap[selected.id] || new Set()
+    const toAdd    = [...pending].filter(id => !orig.has(id))
+    const toRemove = [...orig].filter(id => !pending.has(id))
+    let err = null
+    for (const otherId of toRemove) {
+      const [a, b] = [selected.id, otherId].sort()
+      const { error } = await supabase.from('part_incompatibilities')
+        .delete().eq('part_a_id', a).eq('part_b_id', b)
+      if (error) { err = error; break }
+    }
+    if (!err && toAdd.length > 0) {
+      const rows = toAdd.map(otherId => {
+        const [a, b] = [selected.id, otherId].sort()
+        return { part_a_id: a, part_b_id: b, added_by: userId }
+      })
+      const { error } = await supabase.from('part_incompatibilities').insert(rows)
+      if (error) err = error
+    }
+    if (err) { setStatus(`Error: ${err.message}`); setSaving(false); return }
+    const { data } = await supabase.from('part_incompatibilities')
+      .select('*')
+      .or(`part_a_id.in.(${partIds.join(',')}),part_b_id.in.(${partIds.join(',')})`)
+    setIncompats(data || [])
+    setStatus(`✓ ${toAdd.length} added, ${toRemove.length} removed`)
+    setSaving(false)
+  }
+
+  const renderPanel = (isLeft) => (
+    <div style={{ overflowY:'auto', flex:1 }}>
+      {Object.entries(grouped).map(([cat, subs]) => (
+        <div key={cat}>
+          <div style={{ fontSize:10, color:t.accent, fontFamily:t.mono,
+            textTransform:'uppercase', letterSpacing:'0.12em',
+            padding:'8px 12px 4px', background:t.surf, position:'sticky', top:0, zIndex:1 }}>
+            {cat}
+          </div>
+          {Object.entries(subs).map(([sub, subParts]) => (
+            <div key={sub}>
+              <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono,
+                textTransform:'uppercase', letterSpacing:'0.1em',
+                padding:'4px 12px 2px 20px', background:t.surf,
+                position:'sticky', top:24, zIndex:1 }}>
+                {sub}
+              </div>
+              {subParts
+                .filter(p => isLeft || p.id !== selected?.id)
+                .map(p => {
+                  const isActive    = isLeft ? p.id === selected?.id : pending.has(p.id)
+                  const incompCount = isLeft ? (incompatMap[p.id]?.size || 0) : 0
+                  return (
+                    <div key={p.id}
+                      onClick={() => {
+                        if (isLeft) {
+                          if (isDirty && !confirm('Unsaved changes — switch part anyway?')) return
+                          setSelected(p); setStatus('')
+                        } else {
+                          toggle(p.id)
+                        }
+                      }}
+                      style={{
+                        display:'flex', alignItems:'center', gap:8,
+                        padding:'6px 12px 6px 28px',
+                        background: isActive
+                          ? (isLeft ? `${t.accent}18` : `${t.red}18`)
+                          : 'transparent',
+                        borderLeft: isActive
+                          ? `2px solid ${isLeft ? t.accent : t.red}`
+                          : '2px solid transparent',
+                        cursor:'pointer',
+                      }}>
+                      {!isLeft && (
+                        <input type="checkbox" readOnly checked={pending.has(p.id)}
+                          style={{ accentColor:t.red, width:13, height:13,
+                            flexShrink:0, cursor:'pointer' }} />
+                      )}
+                      <span style={{ fontSize:13, fontFamily:t.mono,
+                        color: isActive ? t.text : t.mid, flex:1, lineHeight:1.3 }}>
+                        {p.name}
+                        {p.is_stock && <span style={{ color:t.dim, fontSize:11 }}> (stock)</span>}
+                      </span>
+                      {isLeft && incompCount > 0 && (
+                        <span style={{ fontSize:10, color:t.red, fontFamily:t.mono,
+                          background:`${t.red}18`, padding:'1px 6px', borderRadius:3 }}>
+                          ⛔ {incompCount}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })
+              }
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+
+  return (
+    <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:t.bg }}>
+      <div style={{ background:t.surf, borderBottom:`1px solid ${t.border}`,
+        padding:'14px 20px', flexShrink:0,
+        display:'flex', alignItems:'center', gap:12 }}>
+        <button onClick={onBack}
+          style={{ background:'none', border:`1px solid ${t.border}`,
+            color:t.dim, padding:'5px 12px', borderRadius:4, fontSize:13,
+            fontFamily:t.mono, cursor:'pointer', textTransform:'uppercase' }}>
+          ← Parts
+        </button>
+        <div style={{ fontFamily:t.head, fontSize:20, fontWeight:800,
+          textTransform:'uppercase', letterSpacing:'0.05em', color:t.text }}>
+          {car.year} {car.make} {car.model}
+          <span style={{ color:t.dim, fontWeight:400, fontSize:16 }}> — Incompatibilities</span>
+        </div>
+        <div style={{ flex:1 }} />
+        <div style={{ fontSize:12, color:t.dim, fontFamily:t.mono }}>
+          {incompats.length} pair{incompats.length !== 1 ? 's' : ''} stored
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ flex:1, display:'flex', alignItems:'center',
+          justifyContent:'center', color:t.dim, fontFamily:t.mono, fontSize:14 }}>
+          Loading...
+        </div>
+      ) : (
+        <div style={{ flex:1, display:'flex', minHeight:0 }}>
+          <div style={{ width:'45%', borderRight:`1px solid ${t.border}`,
+            display:'flex', flexDirection:'column' }}>
+            <div style={{ padding:'8px 12px', borderBottom:`1px solid ${t.border}`,
+              fontSize:10, color:t.accent, fontFamily:t.mono,
+              textTransform:'uppercase', letterSpacing:'0.12em', flexShrink:0 }}>
+              Select Part
+            </div>
+            {renderPanel(true)}
+          </div>
+          <div style={{ flex:1, display:'flex', flexDirection:'column' }}>
+            <div style={{ padding:'8px 12px', borderBottom:`1px solid ${t.border}`,
+              display:'flex', alignItems:'center', gap:10, flexShrink:0, minHeight:37 }}>
+              <div style={{ fontSize:10, color:t.accent, fontFamily:t.mono,
+                textTransform:'uppercase', letterSpacing:'0.12em', flex:1 }}>
+                {selected
+                  ? <>⛔ Incompatible with: <span style={{ color:t.text }}>{selected.name}</span></>
+                  : '← Select a part first'}
+              </div>
+              {selected && <>
+                {status && (
+                  <span style={{ fontSize:12, fontFamily:t.mono,
+                    color: status.startsWith('✓') ? t.green : t.red }}>
+                    {status}
+                  </span>
+                )}
+                <Btn small variant="ghost"
+                  onClick={() => { setPending(new Set(incompatMap[selected.id] || [])); setStatus('') }}
+                  disabled={!isDirty}>
+                  Reset
+                </Btn>
+                <Btn small onClick={save} disabled={saving || !isDirty}>
+                  {saving ? 'Saving...' : `Save (${pending.size} selected)`}
+                </Btn>
+              </>}
+            </div>
+            {selected
+              ? renderPanel(false)
+              : (
+                <div style={{ flex:1, display:'flex', alignItems:'center',
+                  justifyContent:'center', color:t.dim, fontFamily:t.mono,
+                  fontSize:13, textAlign:'center', padding:20 }}>
+                  Select a part on the left to define<br />what it cannot be combined with
+                </div>
+              )
+            }
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
