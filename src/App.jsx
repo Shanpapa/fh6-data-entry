@@ -2006,7 +2006,9 @@ function IncompatibilityView({ car, parts, userId, onBack }) {
   const [pending,   setPending]   = useState(new Set())
   const [saving,    setSaving]    = useState(false)
   const [status,    setStatus]    = useState('')
-  const [loading,   setLoading]   = useState(true)
+  const [loading,     setLoading]     = useState(true)
+  const [searchLeft,  setSearchLeft]  = useState('')
+  const [searchRight, setSearchRight] = useState('')
 
   const partIds = parts.map(p => p.id)
 
@@ -2087,16 +2089,28 @@ function IncompatibilityView({ car, parts, userId, onBack }) {
     setSaving(false)
   }
 
-  const renderPanel = (isLeft) => (
+  const renderPanel = (isLeft, search) => {
+    const q = (search || '').toLowerCase().trim()
+    return (
     <div style={{ overflowY:'auto', flex:1 }}>
-      {Object.entries(grouped).map(([cat, subs]) => (
+      {Object.entries(grouped).map(([cat, subs]) => {
+        const catVisible = Object.values(subs).some(subParts =>
+          subParts.some(p => !q || p.name.toLowerCase().includes(q))
+        )
+        if (!catVisible) return null
+        return (
         <div key={cat}>
           <div style={{ fontSize:10, color:t.accent, fontFamily:t.mono,
             textTransform:'uppercase', letterSpacing:'0.12em',
             padding:'8px 12px 4px', background:t.surf, position:'sticky', top:0, zIndex:1 }}>
             {cat}
           </div>
-          {Object.entries(subs).map(([sub, subParts]) => (
+          {Object.entries(subs).map(([sub, subParts]) => {
+            const visible = subParts.filter(p =>
+              (isLeft || p.id !== selected?.id) && (!q || p.name.toLowerCase().includes(q))
+            )
+            if (visible.length === 0) return null
+            return (
             <div key={sub}>
               <div style={{ fontSize:10, color:t.dim, fontFamily:t.mono,
                 textTransform:'uppercase', letterSpacing:'0.1em',
@@ -2104,7 +2118,7 @@ function IncompatibilityView({ car, parts, userId, onBack }) {
                 position:'sticky', top:24, zIndex:1 }}>
                 {sub}
               </div>
-              {subParts
+              {visible
                 .filter(p => isLeft || p.id !== selected?.id)
                 .map(p => {
                   const isActive    = isLeft ? p.id === selected?.id : pending.has(p.id)
@@ -2151,11 +2165,14 @@ function IncompatibilityView({ car, parts, userId, onBack }) {
                 })
               }
             </div>
-          ))}
+            )
+          })}
         </div>
-      ))}
+        )
+      })}
     </div>
-  )
+    )
+  }
 
   return (
     <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:t.bg }}>
@@ -2189,40 +2206,57 @@ function IncompatibilityView({ car, parts, userId, onBack }) {
           <div style={{ width:'45%', borderRight:`1px solid ${t.border}`,
             display:'flex', flexDirection:'column' }}>
             <div style={{ padding:'8px 12px', borderBottom:`1px solid ${t.border}`,
-              fontSize:10, color:t.accent, fontFamily:t.mono,
-              textTransform:'uppercase', letterSpacing:'0.12em', flexShrink:0 }}>
-              Select Part
+              flexShrink:0 }}>
+              <div style={{ fontSize:10, color:t.accent, fontFamily:t.mono,
+                textTransform:'uppercase', letterSpacing:'0.12em', marginBottom:6 }}>
+                Select Part
+              </div>
+              <input value={searchLeft} onChange={e => setSearchLeft(e.target.value)}
+                placeholder="Search parts..."
+                style={{ background:t.surf3, border:`1px solid ${t.border}`, color:t.text,
+                  padding:'5px 10px', borderRadius:4, fontSize:12, fontFamily:t.mono,
+                  width:'100%', outline:'none' }} />
             </div>
-            {renderPanel(true)}
+            {renderPanel(true, searchLeft)}
           </div>
           <div style={{ flex:1, display:'flex', flexDirection:'column' }}>
             <div style={{ padding:'8px 12px', borderBottom:`1px solid ${t.border}`,
-              display:'flex', alignItems:'center', gap:10, flexShrink:0, minHeight:37 }}>
-              <div style={{ fontSize:10, color:t.accent, fontFamily:t.mono,
-                textTransform:'uppercase', letterSpacing:'0.12em', flex:1 }}>
-                {selected
-                  ? <>⛔ Incompatible with: <span style={{ color:t.text }}>{selected.name}</span></>
-                  : '← Select a part first'}
+              flexShrink:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
+                <div style={{ fontSize:10, color:t.accent, fontFamily:t.mono,
+                  textTransform:'uppercase', letterSpacing:'0.12em', flex:1 }}>
+                  {selected
+                    ? <>⛔ Incompatible with: <span style={{ color:t.text }}>{selected.name}</span></>
+                    : '← Select a part first'}
+                </div>
+                {selected && <>
+                  {status && (
+                    <span style={{ fontSize:12, fontFamily:t.mono,
+                      color: status.startsWith('✓') ? t.green : t.red }}>
+                      {status}
+                    </span>
+                  )}
+                  <Btn small variant="ghost"
+                    onClick={() => { setPending(new Set(incompatMap[selected.id] || [])); setStatus('') }}
+                    disabled={!isDirty}>
+                    Reset
+                  </Btn>
+                  <Btn small onClick={save} disabled={saving || !isDirty}>
+                    {saving ? 'Saving...' : `Save (${pending.size} selected)`}
+                  </Btn>
+                </>}
               </div>
-              {selected && <>
-                {status && (
-                  <span style={{ fontSize:12, fontFamily:t.mono,
-                    color: status.startsWith('✓') ? t.green : t.red }}>
-                    {status}
-                  </span>
-                )}
-                <Btn small variant="ghost"
-                  onClick={() => { setPending(new Set(incompatMap[selected.id] || [])); setStatus('') }}
-                  disabled={!isDirty}>
-                  Reset
-                </Btn>
-                <Btn small onClick={save} disabled={saving || !isDirty}>
-                  {saving ? 'Saving...' : `Save (${pending.size} selected)`}
-                </Btn>
-              </>}
+              <input value={searchRight} onChange={e => setSearchRight(e.target.value)}
+                placeholder="Search parts..."
+                disabled={!selected}
+                style={{ background:t.surf3,
+                  border:`1px solid ${t.border}`, color:t.text,
+                  padding:'5px 10px', borderRadius:4, fontSize:12, fontFamily:t.mono,
+                  width:'100%', outline:'none',
+                  opacity: selected ? 1 : 0.4, cursor: selected ? 'text' : 'default' }} />
             </div>
             {selected
-              ? renderPanel(false)
+              ? renderPanel(false, searchRight)
               : (
                 <div style={{ flex:1, display:'flex', alignItems:'center',
                   justifyContent:'center', color:t.dim, fontFamily:t.mono,
